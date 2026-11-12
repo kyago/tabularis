@@ -179,3 +179,11 @@ tauri-plugin-updater = { version = "2", optional = true }
 tauri = { version = "2.10.2", features = ["test"] }
 filetime = "0.2"
 tokio-tungstenite = "0.24.0"
+
+# Personal web runtime (`tdev release` on the `local` branch): release speed without LTO, so rebuilds take minutes.
+[profile.local]
+inherits = "release"
+lto = false
+codegen-units = 16
+incremental = true
+strip = false
