@@ -5,6 +5,7 @@ import {
     getLabelColumns,
     buildDefaultChartConfig,
     transformResultToChartData,
+    buildChartData,
 } from '@/utils/notebookChart';
 import type {QueryResult} from '@/types/editor';
 import type {CellChartConfig} from '@/types/notebook';
@@ -160,5 +161,45 @@ describe('notebookChart', () => {
             const data = transformResultToChartData(result, config);
             expect(data[0].label).toBe('');
         });
+    });
+});
+
+describe('buildChartData', () => {
+    const base: CellChartConfig = {type: 'line', labelColumn: 'day', valueColumns: ['n']};
+
+    it('returns wide data and value keys without a series column', () => {
+        const result = makeResult();
+        const {data, keys} = buildChartData(result, {
+            type: 'bar',
+            labelColumn: 'name',
+            valueColumns: ['sales', 'missing'],
+        });
+        expect(keys).toEqual(['sales']);
+        expect(data[0]).toEqual({label: 'Alice', sales: 100});
+    });
+
+    it('pivots long rows into one key per series value, summing duplicates', () => {
+        const result = makeResult({
+            columns: ['day', 'kind', 'n'],
+            rows: [
+                ['d1', 'a', 1],
+                ['d1', 'b', 2],
+                ['d2', 'a', 3],
+                ['d2', 'a', 4],
+                ['d2', null, 5],
+            ],
+        });
+        const {data, keys} = buildChartData(result, {...base, seriesColumn: 'kind'});
+        expect(keys).toEqual(['a', 'b', '(null)']);
+        expect(data).toEqual([
+            {label: 'd1', a: 1, b: 2},
+            {label: 'd2', a: 7, '(null)': 5},
+        ]);
+    });
+
+    it('falls back to wide data when the series column is not in the result', () => {
+        const result = makeResult({columns: ['day', 'n'], rows: [['d1', 1]]});
+        const {keys} = buildChartData(result, {...base, seriesColumn: 'gone'});
+        expect(keys).toEqual(['n']);
     });
 });

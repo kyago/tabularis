@@ -61,3 +61,63 @@ export function transformResultToChartData(
         return point;
     });
 }
+
+/** Chart types offered in the notebook, in menu order. */
+export const CHART_TYPES: ChartType[] = [
+    'bar',
+    'stackedBar',
+    'percentBar',
+    'horizontalBar',
+    'posNegBar',
+    'line',
+    'area',
+    'stackedArea',
+    'combo',
+    'scatter',
+    'pie',
+    'donut',
+    'treemap',
+    'radar',
+    'funnel',
+];
+
+/** Types that plot one value per label; extra series are ignored. */
+export const SINGLE_SERIES_TYPES: ReadonlySet<ChartType> = new Set([
+    'pie',
+    'donut',
+    'treemap',
+    'funnel',
+]);
+
+/**
+ * Chart points plus the series keys to plot. With `seriesColumn`, long rows
+ * (label, series, value) are pivoted into one point per label and one key per series.
+ */
+export function buildChartData(
+    result: QueryResult,
+    config: CellChartConfig,
+): {data: ChartDataPoint[]; keys: string[]} {
+    const seriesIdx = config.seriesColumn ? result.columns.indexOf(config.seriesColumn) : -1;
+    if (seriesIdx === -1) {
+        const data = transformResultToChartData(result, config);
+        return {data, keys: config.valueColumns.filter((c) => result.columns.includes(c))};
+    }
+    const labelIdx = result.columns.indexOf(config.labelColumn);
+    const valueIdx = result.columns.indexOf(config.valueColumns[0]);
+    if (labelIdx === -1 || valueIdx === -1) return {data: [], keys: []};
+
+    const byLabel = new Map<string, ChartDataPoint>();
+    const keys: string[] = [];
+    for (const row of result.rows) {
+        const label = row[labelIdx] != null ? String(row[labelIdx]) : '';
+        const key = row[seriesIdx] != null ? String(row[seriesIdx]) : '(null)';
+        if (!keys.includes(key)) keys.push(key);
+        let point = byLabel.get(label);
+        if (!point) byLabel.set(label, (point = {label}));
+        const val = row[valueIdx];
+        // Duplicate (label, series) rows are summed rather than silently overwritten.
+        const num = typeof val === 'number' ? val : Number(val) || 0;
+        point[key] = (typeof point[key] === 'number' ? (point[key] as number) : 0) + num;
+    }
+    return {data: [...byLabel.values()], keys};
+}

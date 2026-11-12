@@ -2,12 +2,29 @@ import type {QueryResult} from './editor';
 
 export type NotebookCellType = 'sql' | 'markdown';
 
-export type ChartType = 'bar' | 'line' | 'pie';
+export type ChartType =
+    | 'bar'
+    | 'stackedBar'
+    | 'percentBar'
+    | 'horizontalBar'
+    | 'posNegBar'
+    | 'line'
+    | 'area'
+    | 'stackedArea'
+    | 'combo'
+    | 'scatter'
+    | 'pie'
+    | 'donut'
+    | 'treemap'
+    | 'radar'
+    | 'funnel';
 
 export interface CellChartConfig {
     type: ChartType;
     labelColumn: string;
     valueColumns: string[];
+    /** Long-format results: one series per distinct value of this column, plotting valueColumns[0]. */
+    seriesColumn?: string;
 }
 
 export interface RunAllResult {

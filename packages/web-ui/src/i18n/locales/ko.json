@@ -2138,6 +2138,8 @@
       "chartType": "차트 유형",
       "chartLabel": "레이블",
       "chartValues": "값",
+      "chartSeries": "시리즈",
+      "chartScatterHint": "산점도는 값 컬럼이 2개 이상 필요합니다. 첫 번째가 X축입니다.",
       "exportCsv": "CSV로 내보내기",
       "exportJson": "JSON으로 내보내기",
       "exportHtml": "HTML로 내보내기",
