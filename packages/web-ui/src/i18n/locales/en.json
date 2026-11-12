@@ -2241,6 +2241,8 @@
       "chartType": "Chart",
       "chartLabel": "Label",
       "chartValues": "Values",
+      "chartSeries": "Series",
+      "chartScatterHint": "Scatter needs at least two value columns: the first is X.",
       "exportCsv": "Export as CSV",
       "exportJson": "Export as JSON",
       "exportHtml": "Export as HTML",

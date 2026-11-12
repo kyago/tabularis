@@ -295,7 +295,7 @@ Every release is documented in [CHANGELOG.md](./CHANGELOG.md).
 
 <sub>[Full reference on tabularis.dev →](https://tabularis.dev/wiki/notebooks)</sub>
 
-- **Multi-Cell Workspace:** Combine SQL and Markdown cells in a single document, with inline results and bar/line/pie charts.
+- **Multi-Cell Workspace:** Combine SQL and Markdown cells in a single document, with inline results and charts (bar, stacked/100%/horizontal/positive-negative bar, line, area, stacked area, bar+line combo, scatter, pie, donut, treemap, radar, funnel), with an optional series column to pivot long query results.
 - **Cross-Cell Variables:** Reference another cell's full result as a table with `{{cell_N}}` (expanded to a CTE at run time), plus global `@paramName` parameters.
 - **Run All:** Sequential execution with stop-on-error option and completion summary.
 - **Persistence & Export:** Auto-saved as `.tabularis-notebook` files; export as HTML, CSV, or JSON.
