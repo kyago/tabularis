@@ -2253,10 +2253,7 @@
       "viewEdit": "Правка",
       "includeInReport": "Включить в отчёт",
       "excludeFromReport": "Исключить из отчёта",
-      "reportWidth": "Ширина в отчёте",
-      "reportWidthFull": "Во всю ширину",
-      "reportWidthHalf": "Половина",
-      "reportWidthThird": "Треть"
+      "reportWidth": "Ширина в отчёте"
     },
     "querySelection": {
       "title": "Выбрать запрос для выполнения",

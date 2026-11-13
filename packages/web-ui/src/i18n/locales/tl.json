@@ -2267,10 +2267,7 @@
       "viewEdit": "I-edit",
       "includeInReport": "Isama sa report",
       "excludeFromReport": "Huwag isama sa report",
-      "reportWidth": "Lapad sa report",
-      "reportWidthFull": "Buong lapad",
-      "reportWidthHalf": "Kalahating lapad",
-      "reportWidthThird": "Isang katlo"
+      "reportWidth": "Lapad sa report"
     },
     "querySelection": {
       "title": "Pumili ng Query na Isasakatuparan",

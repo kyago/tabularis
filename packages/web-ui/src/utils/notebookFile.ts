@@ -1,4 +1,9 @@
-import type {NotebookCell, NotebookFile, NotebookParam, ReportWidth} from '@/types/notebook';
+import {
+    REPORT_GRID_COLUMNS,
+    type NotebookCell,
+    type NotebookFile,
+    type NotebookParam,
+} from '@/types/notebook';
 import {generateCellId} from './notebook';
 import {validateParamName} from './notebookParams';
 
@@ -7,10 +12,19 @@ import {validateParamName} from './notebookParams';
  * a valid identifier (`\w+`) and value must be a string. Malformed entries
  * are dropped instead of failing the whole import.
  */
-const REPORT_WIDTHS: readonly ReportWidth[] = ['full', 'half', 'third'];
+// Width presets written before tiles were resized by dragging.
+const LEGACY_REPORT_WIDTHS: Record<string, number> = {full: 6, half: 3, third: 2};
 
-function sanitizeReportWidth(raw: unknown): ReportWidth | undefined {
-    return REPORT_WIDTHS.find((w) => w === raw);
+function sanitizeReportSpan(span: unknown, legacyWidth: unknown): number | undefined {
+    if (
+        typeof span === 'number' &&
+        Number.isInteger(span) &&
+        span >= 1 &&
+        span <= REPORT_GRID_COLUMNS
+    )
+        return span;
+    if (span !== undefined) return undefined;
+    return typeof legacyWidth === 'string' ? LEGACY_REPORT_WIDTHS[legacyWidth] : undefined;
 }
 
 function sanitizeParams(raw: unknown): NotebookParam[] | undefined {
@@ -48,7 +62,7 @@ export function serializeNotebook(
             ...(c.isChartVisible != null ? {isChartVisible: c.isChartVisible} : {}),
             ...(c.isQueryPlanVisible != null ? {isQueryPlanVisible: c.isQueryPlanVisible} : {}),
             ...(c.isReportHidden ? {isReportHidden: true} : {}),
-            ...(c.reportWidth ? {reportWidth: c.reportWidth} : {}),
+            ...(c.reportSpan ? {reportSpan: c.reportSpan} : {}),
         })),
         ...(params && params.length > 0 ? {params} : {}),
         ...(stopOnError ? {stopOnError} : {}),
@@ -108,7 +122,7 @@ export function deserializeNotebook(json: string): {
                 isChartVisible: cellRaw.isChartVisible as boolean | undefined,
                 isQueryPlanVisible: cellRaw.isQueryPlanVisible as boolean | undefined,
                 isReportHidden: cellRaw.isReportHidden === true ? true : undefined,
-                reportWidth: sanitizeReportWidth(cellRaw.reportWidth),
+                reportSpan: sanitizeReportSpan(cellRaw.reportSpan, cellRaw.reportWidth),
                 result: null,
                 error: undefined,
                 executionTime: null,

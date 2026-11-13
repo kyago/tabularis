@@ -27,7 +27,7 @@ const cells: NotebookCell[] = [
         content: 'SELECT region, revenue FROM sales',
         result,
         chartConfig: {type: 'bar', labelColumn: 'region', valueColumns: ['revenue']},
-        reportWidth: 'half',
+        reportSpan: 3,
     },
     {id: 'table', type: 'sql', content: 'SELECT * FROM t', result},
     {
@@ -46,6 +46,7 @@ function renderView(overrides: Partial<Parameters<typeof NotebookReportView>[0]>
         params: [],
         onParamsChange: vi.fn(),
         onRunAll: vi.fn(),
+        onReportSpanChange: vi.fn(),
         isRunning: false,
         ...overrides,
     };
@@ -93,5 +94,48 @@ describe('NotebookReportView', () => {
     it('shows when a result came from the cache', () => {
         renderView({cells: [{...cells[2], cachedAt: Date.UTC(2026, 10, 13, 4, 42)}]});
         expect(screen.getByText('editor.notebook.cachedAt')).toBeTruthy();
+    });
+    it('exposes a width handle per tile for assistive tech', () => {
+        renderView();
+        const handle = screen.getByRole('separator', {
+            name: 'Revenue: editor.notebook.reportWidth',
+        });
+        expect(handle.getAttribute('aria-valuenow')).toBe('3');
+        expect(handle.getAttribute('aria-valuemin')).toBe('1');
+        expect(handle.getAttribute('aria-valuemax')).toBe('6');
+    });
+
+    it('widens and narrows a tile one column with the arrow keys', () => {
+        const props = renderView();
+        const handle = screen.getByRole('separator', {
+            name: 'Revenue: editor.notebook.reportWidth',
+        });
+        fireEvent.keyDown(handle, {key: 'ArrowRight'});
+        expect(props.onReportSpanChange).toHaveBeenLastCalledWith('chart', 4);
+        fireEvent.keyDown(handle, {key: 'ArrowLeft'});
+        expect(props.onReportSpanChange).toHaveBeenLastCalledWith('chart', 2);
+    });
+
+    it('does not go past the grid edges', () => {
+        const props = renderView({cells: [{...cells[2], reportSpan: 6}]});
+        fireEvent.keyDown(screen.getAllByRole('separator')[0], {key: 'ArrowRight'});
+        expect(props.onReportSpanChange).not.toHaveBeenCalled();
+    });
+
+    it('snaps a drag to whole columns and saves once on release', () => {
+        const props = renderView();
+        const grid = screen.getByText('Revenue').closest('section')!.parentElement!;
+        grid.getBoundingClientRect = () => ({width: 600}) as DOMRect;
+        const handle = screen.getByRole('separator', {
+            name: 'Revenue: editor.notebook.reportWidth',
+        });
+        fireEvent.pointerDown(handle, {clientX: 300, pointerId: 1});
+        fireEvent.pointerMove(handle, {clientX: 420, pointerId: 1});
+        expect(screen.getByText('Revenue').closest('section')!.className).toContain(
+            'md:col-span-4',
+        );
+        expect(props.onReportSpanChange).not.toHaveBeenCalled();
+        fireEvent.pointerUp(handle, {clientX: 420, pointerId: 1});
+        expect(props.onReportSpanChange).toHaveBeenCalledExactlyOnceWith('chart', 4);
     });
 });

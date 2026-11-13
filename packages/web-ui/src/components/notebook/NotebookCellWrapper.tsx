@@ -114,8 +114,6 @@ export function NotebookCellWrapper({
                 cellContent={cell.content}
                 isReportHidden={cell.isReportHidden}
                 onToggleReportHidden={() => onUpdate({isReportHidden: !cell.isReportHidden})}
-                reportWidth={cell.reportWidth}
-                onReportWidthChange={(reportWidth) => onUpdate({reportWidth})}
             />
 
             {showHistory && cell.type === 'sql' && (

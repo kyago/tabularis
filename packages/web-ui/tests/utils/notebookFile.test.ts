@@ -483,39 +483,57 @@ describe('notebookFile utils', () => {
         });
     });
     describe('report view fields', () => {
-        it('round-trips report inclusion and width', () => {
+        it('round-trips report inclusion and span', () => {
             const cells = makeCells();
-            cells[0] = {...cells[0], isReportHidden: true, reportWidth: 'half'};
+            cells[0] = {...cells[0], isReportHidden: true, reportSpan: 4};
             const file = serializeNotebook('T', cells);
-            expect(file.cells[0]).toMatchObject({isReportHidden: true, reportWidth: 'half'});
+            expect(file.cells[0]).toMatchObject({isReportHidden: true, reportSpan: 4});
             const back = deserializeNotebook(JSON.stringify(file));
             expect(back.cells[0].isReportHidden).toBe(true);
-            expect(back.cells[0].reportWidth).toBe('half');
+            expect(back.cells[0].reportSpan).toBe(4);
         });
 
         it('omits report fields when unset', () => {
             const file = serializeNotebook('T', makeCells());
             expect(file.cells[1]).not.toHaveProperty('isReportHidden');
-            expect(file.cells[1]).not.toHaveProperty('reportWidth');
+            expect(file.cells[1]).not.toHaveProperty('reportSpan');
         });
 
-        it('drops an unknown report width from untrusted files', () => {
+        it.each([
+            ['full', 6],
+            ['half', 3],
+            ['third', 2],
+        ])('reads the earlier %s width as span %i', (reportWidth, span) => {
             const json = JSON.stringify({
                 version: 2,
                 title: 'T',
                 createdAt: '',
-                cells: [
-                    {
-                        type: 'sql',
-                        content: 'SELECT 1',
-                        reportWidth: 'quarter',
-                        isReportHidden: 'yes',
-                    },
-                ],
+                cells: [{type: 'sql', content: 'SELECT 1', reportWidth}],
             });
-            const back = deserializeNotebook(json);
-            expect(back.cells[0].reportWidth).toBeUndefined();
-            expect(back.cells[0].isReportHidden).toBeUndefined();
+            expect(deserializeNotebook(json).cells[0].reportSpan).toBe(span);
         });
+
+        it.each([0, 7, 2.5, '3', 'quarter'])(
+            'drops an invalid span %s from untrusted files',
+            (bad) => {
+                const json = JSON.stringify({
+                    version: 2,
+                    title: 'T',
+                    createdAt: '',
+                    cells: [
+                        {
+                            type: 'sql',
+                            content: 'SELECT 1',
+                            reportSpan: bad,
+                            reportWidth: 'quarter',
+                            isReportHidden: 'yes',
+                        },
+                    ],
+                });
+                const back = deserializeNotebook(json);
+                expect(back.cells[0].reportSpan).toBeUndefined();
+                expect(back.cells[0].isReportHidden).toBeUndefined();
+            },
+        );
     });
 });

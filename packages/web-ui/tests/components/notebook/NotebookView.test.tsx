@@ -99,10 +99,19 @@ vi.mock('@/components/notebook/RunAllSummary', () => ({
 }));
 vi.mock('@/components/notebook/ParamsPanel', () => ({ParamsPanel: () => null}));
 vi.mock('@/components/notebook/NotebookReportView', () => ({
-    NotebookReportView: ({cells, onRunAll}: {cells: NotebookCell[]; onRunAll: () => void}) => (
+    NotebookReportView: ({
+        cells,
+        onRunAll,
+        onReportSpanChange,
+    }: {
+        cells: NotebookCell[];
+        onRunAll: () => void;
+        onReportSpanChange: (cellId: string, span: number) => void;
+    }) => (
         <div data-testid="report">
             {cells.map((c) => c.id).join(',')}
             <button onClick={onRunAll}>Report run all</button>
+            <button onClick={() => onReportSpanChange(cells[0].id, 2)}>Narrow first tile</button>
         </div>
     ),
 }));
@@ -844,6 +853,16 @@ describe('NotebookView', () => {
         });
     });
     describe('report view', () => {
+        it('saves a tile width changed in report view', async () => {
+            renderNotebook({cells: [sqlCell('a', 'SELECT 1')]});
+            await settle();
+            fireEvent.click(screen.getByRole('button', {name: 'Toggle report'}));
+            fireEvent.click(screen.getByRole('button', {name: 'Narrow first tile'}));
+            await settle();
+            expect(savedCell('a').reportSpan).toBe(2);
+            expect(mockInvoke).not.toHaveBeenCalled();
+        });
+
         it('drops the cached marker when a cell runs again', async () => {
             renderNotebook({cells: [sqlCell('a', 'SELECT 1', {result: queryResult, cachedAt: 5})]});
             await settle();

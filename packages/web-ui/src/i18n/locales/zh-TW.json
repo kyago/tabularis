@@ -2272,10 +2272,7 @@
             "viewEdit": "編輯",
             "includeInReport": "包含在報告中",
             "excludeFromReport": "從報告中排除",
-            "reportWidth": "報告寬度",
-            "reportWidthFull": "全寬",
-            "reportWidthHalf": "1/2 寬",
-            "reportWidthThird": "1/3 寬"
+            "reportWidth": "報告寬度"
         },
         "querySelection": {
             "title": "選擇要執行的查詢",

@@ -2279,10 +2279,7 @@
       "viewEdit": "Chỉnh sửa",
       "includeInReport": "Đưa vào báo cáo",
       "excludeFromReport": "Loại khỏi báo cáo",
-      "reportWidth": "Độ rộng trong báo cáo",
-      "reportWidthFull": "Toàn chiều rộng",
-      "reportWidthHalf": "Nửa chiều rộng",
-      "reportWidthThird": "Một phần ba"
+      "reportWidth": "Độ rộng trong báo cáo"
     },
     "querySelection": {
       "title": "Chọn truy vấn để chạy",

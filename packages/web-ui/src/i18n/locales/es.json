@@ -2209,10 +2209,7 @@
       "viewEdit": "Editar",
       "includeInReport": "Incluir en el informe",
       "excludeFromReport": "Excluir del informe",
-      "reportWidth": "Ancho en el informe",
-      "reportWidthFull": "Ancho completo",
-      "reportWidthHalf": "Medio ancho",
-      "reportWidthThird": "Un tercio"
+      "reportWidth": "Ancho en el informe"
     },
     "querySelection": {
       "title": "Seleccionar consulta a ejecutar",

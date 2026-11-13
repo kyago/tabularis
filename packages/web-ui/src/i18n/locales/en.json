@@ -2309,10 +2309,7 @@
       "viewEdit": "Edit",
       "includeInReport": "Include in report",
       "excludeFromReport": "Exclude from report",
-      "reportWidth": "Report width",
-      "reportWidthFull": "Full width",
-      "reportWidthHalf": "Half width",
-      "reportWidthThird": "One third"
+      "reportWidth": "Report width"
     },
     "querySelection": {
       "title": "Select Query to Execute",

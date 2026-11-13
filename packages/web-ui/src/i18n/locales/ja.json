@@ -2247,10 +2247,7 @@
       "viewEdit": "編集",
       "includeInReport": "レポートに含める",
       "excludeFromReport": "レポートから除外",
-      "reportWidth": "レポート幅",
-      "reportWidthFull": "全幅",
-      "reportWidthHalf": "1/2 幅",
-      "reportWidthThird": "1/3 幅"
+      "reportWidth": "レポート幅"
     },
     "querySelection": {
       "title": "実行するクエリを選択",

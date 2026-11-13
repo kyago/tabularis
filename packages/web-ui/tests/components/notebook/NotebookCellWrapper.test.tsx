@@ -353,13 +353,9 @@ describe('NotebookCellWrapper report controls', () => {
         expect(props.onUpdate).toHaveBeenCalledWith({isReportHidden: false});
     });
 
-    it('sets the report tile width through onUpdate', async () => {
-        const props = makeProps();
-        render(<NotebookCellWrapper {...props} />);
+    it('leaves tile width to the report view', async () => {
+        render(<NotebookCellWrapper {...makeProps()} />);
         await settle();
-        const select = screen.getByRole('combobox', {name: 'editor.notebook.reportWidth'});
-        expect(select).toHaveValue('full');
-        fireEvent.change(select, {target: {value: 'half'}});
-        expect(props.onUpdate).toHaveBeenCalledWith({reportWidth: 'half'});
+        expect(screen.queryByRole('combobox', {name: 'editor.notebook.reportWidth'})).toBeNull();
     });
 });

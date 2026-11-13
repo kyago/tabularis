@@ -2296,10 +2296,7 @@
       "viewEdit": "Modifica",
       "includeInReport": "Includi nel report",
       "excludeFromReport": "Escludi dal report",
-      "reportWidth": "Larghezza nel report",
-      "reportWidthFull": "Larghezza piena",
-      "reportWidthHalf": "Metà larghezza",
-      "reportWidthThird": "Un terzo"
+      "reportWidth": "Larghezza nel report"
     },
     "querySelection": {
       "title": "Seleziona la query da eseguire",

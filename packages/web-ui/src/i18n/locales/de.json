@@ -2236,10 +2236,7 @@
       "viewEdit": "Bearbeiten",
       "includeInReport": "In Bericht aufnehmen",
       "excludeFromReport": "Aus Bericht ausschließen",
-      "reportWidth": "Berichtsbreite",
-      "reportWidthFull": "Volle Breite",
-      "reportWidthHalf": "Halbe Breite",
-      "reportWidthThird": "Ein Drittel"
+      "reportWidth": "Berichtsbreite"
     },
     "querySelection": {
       "title": "Abfrage zum Ausführen auswählen",

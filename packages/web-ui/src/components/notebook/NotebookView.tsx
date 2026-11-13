@@ -922,6 +922,9 @@ export function NotebookView({tab, updateTab, connectionId, isActive}: NotebookV
                         params={params}
                         onParamsChange={handleParamsChange}
                         onRunAll={runAll}
+                        onReportSpanChange={(cellId, reportSpan) =>
+                            updateCell(cellId, {reportSpan})
+                        }
                         isRunning={isRunningAll}
                     />
                 ) : (

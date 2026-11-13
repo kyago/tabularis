@@ -2247,10 +2247,7 @@
       "viewEdit": "Editar",
       "includeInReport": "Incluir no relatório",
       "excludeFromReport": "Excluir do relatório",
-      "reportWidth": "Largura no relatório",
-      "reportWidthFull": "Largura total",
-      "reportWidthHalf": "Meia largura",
-      "reportWidthThird": "Um terço"
+      "reportWidth": "Largura no relatório"
     },
     "querySelection": {
       "title": "Selecionar Consulta para Executar",

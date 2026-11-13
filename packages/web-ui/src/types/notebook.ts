@@ -19,8 +19,8 @@ export type ChartType =
     | 'radar'
     | 'funnel';
 
-/** Report-view tile width: full row, half or a third of the 6-column grid. */
-export type ReportWidth = 'full' | 'half' | 'third';
+/** Report-view tile width in columns of the 6-column grid (1-6). */
+export const REPORT_GRID_COLUMNS = 6;
 
 export interface CellChartConfig {
     type: ChartType;
@@ -73,7 +73,7 @@ export interface NotebookCell {
     isQueryPlanVisible?: boolean; // SQL only: query plan (EXPLAIN) section visible, off by default
     history?: CellExecutionEntry[]; // Last N executions
     isReportHidden?: boolean; // Omitted from report view (e.g. setup queries)
-    reportWidth?: ReportWidth; // Report-view tile width, defaults to full
+    reportSpan?: number; // Report-view tile width in grid columns (1-6), defaults to full
     cachedAt?: number; // Runtime only: result restored from the result cache at this time (ms)
     resultQuery?: string; // Runtime only: SQL source that produced `result` (key for the result cache)
 }
@@ -103,7 +103,7 @@ export interface NotebookFile {
         isChartVisible?: boolean;
         isQueryPlanVisible?: boolean;
         isReportHidden?: boolean;
-        reportWidth?: ReportWidth;
+        reportSpan?: number;
     }>;
     params?: NotebookParam[];
     stopOnError?: boolean;
