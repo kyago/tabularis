@@ -49,12 +49,17 @@ function persistResults(notebookId: string, state: NotebookState): Promise<void>
     const connectionId = connectionIdCache.get(notebookId);
     const client = clientCache.get(notebookId);
     if (!connectionId || !client || !resultsChanged(notebookId, state)) return Promise.resolve();
-    savedResults.set(notebookId, resultRefs(state));
-    return client.call('save_notebook_results', {
-        connectionId,
-        notebookId,
-        content: serializeResults(state.cells, Date.now()),
-    });
+    const refs = resultRefs(state);
+    return client
+        .call('save_notebook_results', {
+            connectionId,
+            notebookId,
+            content: serializeResults(state.cells, Date.now()),
+        })
+        .then(() => {
+            // Only after a successful write: a failed one is retried by the next save.
+            savedResults.set(notebookId, refs);
+        });
 }
 
 function generateNotebookId(): string {

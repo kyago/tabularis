@@ -850,6 +850,7 @@ describe('NotebookView', () => {
             fireEvent.click(screen.getByRole('button', {name: 'Run a'}));
             await waitFor(() => expect(savedCell('a').isLoading).toBe(false));
             expect(savedCell('a').cachedAt).toBeUndefined();
+            expect(savedCell('a').resultQuery).toBe('SELECT 1');
         });
 
         it('switches to report view without executing and restores the cells on return', async () => {

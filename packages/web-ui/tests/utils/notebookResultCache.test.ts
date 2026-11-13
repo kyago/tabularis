@@ -1,11 +1,22 @@
 import {describe, it, expect} from 'vitest';
-import {MAX_CACHED_ROWS, applyCachedResults, serializeResults} from '@/utils/notebookResultCache';
+import {
+    MAX_CACHED_BYTES,
+    MAX_CACHED_ROWS,
+    applyCachedResults,
+    serializeResults,
+} from '@/utils/notebookResultCache';
 import type {NotebookCell} from '@/types/notebook';
 
 const result = {columns: ['n'], rows: [[1]], affected_rows: 0};
 
 function sql(id: string, content: string, partial: Partial<NotebookCell> = {}): NotebookCell {
-    return {id, type: 'sql', content, ...partial};
+    return {
+        id,
+        type: 'sql',
+        content,
+        resultQuery: partial.result ? content : undefined,
+        ...partial,
+    };
 }
 
 describe('serializeResults', () => {
@@ -37,6 +48,43 @@ describe('serializeResults', () => {
         );
         expect(JSON.parse(raw).entries.map((e: {content: string}) => e.content)).toEqual([
             'SELECT 1',
+        ]);
+    });
+});
+
+describe('serializeResults safety', () => {
+    it('keys a result by the SQL it ran, not by later unrun edits', () => {
+        const raw = serializeResults(
+            [
+                sql('a', "SELECT * FROM t WHERE region='US'", {
+                    result,
+                    resultQuery: "SELECT * FROM t WHERE region='EU'",
+                }),
+            ],
+            1,
+        );
+        expect(JSON.parse(raw).entries[0].content).toBe("SELECT * FROM t WHERE region='EU'");
+    });
+
+    it('skips cells whose result has no recorded query', () => {
+        const raw = serializeResults([sql('a', 'SELECT 1', {result, resultQuery: undefined})], 1);
+        expect(JSON.parse(raw).entries).toEqual([]);
+    });
+
+    it('keeps the file under the byte budget by skipping only the cells that do not fit', () => {
+        const wide = {columns: ['s'], rows: [['x'.repeat(MAX_CACHED_BYTES)]], affected_rows: 0};
+        const raw = serializeResults(
+            [
+                sql('a', 'SELECT 1', {result}),
+                sql('b', 'SELECT wide', {result: wide}),
+                sql('c', 'SELECT 2', {result}),
+            ],
+            1,
+        );
+        expect(raw.length).toBeLessThanOrEqual(MAX_CACHED_BYTES);
+        expect(JSON.parse(raw).entries.map((e: {content: string}) => e.content)).toEqual([
+            'SELECT 1',
+            'SELECT 2',
         ]);
     });
 });

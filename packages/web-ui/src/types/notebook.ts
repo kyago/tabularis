@@ -75,6 +75,7 @@ export interface NotebookCell {
     isReportHidden?: boolean; // Omitted from report view (e.g. setup queries)
     reportWidth?: ReportWidth; // Report-view tile width, defaults to full
     cachedAt?: number; // Runtime only: result restored from the result cache at this time (ms)
+    resultQuery?: string; // Runtime only: SQL source that produced `result` (key for the result cache)
 }
 
 export interface NotebookState {

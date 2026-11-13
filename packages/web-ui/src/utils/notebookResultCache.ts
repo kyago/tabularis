@@ -3,6 +3,8 @@ import type {NotebookCell} from '@/types/notebook';
 
 /** Larger results are not cached: they would make every save slow. */
 export const MAX_CACHED_ROWS = 50_000;
+/** Whole cache file stays under the web server's 1 MiB request body limit. */
+export const MAX_CACHED_BYTES = 900_000;
 
 const VERSION = 1;
 
@@ -18,15 +20,28 @@ interface CacheEntry {
  * an edited query no longer gets the result of the old one.
  */
 export function serializeResults(cells: NotebookCell[], now: number): string {
-    const entries: CacheEntry[] = cells
-        .filter((c) => c.type === 'sql' && c.result && c.result.rows.length <= MAX_CACHED_ROWS)
-        .map((c) => ({
-            content: c.content,
-            result: c.result!,
+    const encoder = new TextEncoder();
+    // Envelope `{"version":1,"entries":[]}` plus a comma per entry.
+    let bytes = 30;
+    const entries: string[] = [];
+    for (const c of cells) {
+        // Key by the SQL that produced the result: an edited, unrun query must not inherit it.
+        if (c.type !== 'sql' || !c.result || c.resultQuery == null) continue;
+        if (c.result.rows.length > MAX_CACHED_ROWS) continue;
+        const entry: CacheEntry = {
+            content: c.resultQuery,
+            result: c.result,
             executionTime: c.executionTime ?? null,
             timestamp: c.cachedAt ?? now,
-        }));
-    return JSON.stringify({version: VERSION, entries});
+        };
+        const json = JSON.stringify(entry);
+        const size = encoder.encode(json).length + 1;
+        // Skip only the cell that does not fit, so one wide result never drops the rest.
+        if (bytes + size > MAX_CACHED_BYTES) continue;
+        bytes += size;
+        entries.push(json);
+    }
+    return `{"version":${VERSION},"entries":[${entries.join(',')}]}`;
 }
 
 function parseEntries(raw: string | null): CacheEntry[] | null {
@@ -63,6 +78,7 @@ export function applyCachedResults(cells: NotebookCell[], raw: string | null): N
             result: entry.result,
             executionTime: entry.executionTime,
             cachedAt: entry.timestamp,
+            resultQuery: entry.content,
         };
     });
 }

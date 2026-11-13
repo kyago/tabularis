@@ -429,6 +429,7 @@ export function NotebookView({tab, updateTab, connectionId, isActive}: NotebookV
 
                 updateCell(cellId, {
                     result: res,
+                    resultQuery: cell.content,
                     executionTime: elapsed,
                     isLoading: false,
                     error: undefined,

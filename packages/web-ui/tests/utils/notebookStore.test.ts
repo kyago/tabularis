@@ -326,7 +326,9 @@ describe('notebookStore', () => {
             expect(call).not.toHaveBeenCalledWith('save_notebook_results', expect.anything());
 
             setNotebookState('cache-1', {
-                cells: [{id: 'c1', type: 'sql', content: 'SELECT 1', result}],
+                cells: [
+                    {id: 'c1', type: 'sql', content: 'SELECT 1', resultQuery: 'SELECT 1', result},
+                ],
             });
             await vi.advanceTimersByTimeAsync(1500);
             expect(call).toHaveBeenCalledWith('save_notebook_results', {
@@ -344,6 +346,33 @@ describe('notebookStore', () => {
             await vi.advanceTimersByTimeAsync(1500);
             expect(call).toHaveBeenCalledWith('save_notebook', expect.anything());
             expect(call).not.toHaveBeenCalledWith('save_notebook_results', expect.anything());
+        });
+
+        it('retries a failed result write on the next save', async () => {
+            await seedConnection('cache-retry');
+            const withResult = {
+                cells: [
+                    {
+                        id: 'c1',
+                        type: 'sql' as const,
+                        content: 'SELECT 1',
+                        resultQuery: 'SELECT 1',
+                        result,
+                    },
+                ],
+            };
+            call.mockImplementation(async (command: string) => {
+                if (command === 'save_notebook_results') throw new Error('413');
+                return undefined;
+            });
+            setNotebookState('cache-retry', withResult);
+            await vi.advanceTimersByTimeAsync(1500);
+
+            call.mockReset();
+            call.mockResolvedValue(undefined);
+            setNotebookState('cache-retry', {...withResult});
+            await vi.advanceTimersByTimeAsync(1500);
+            expect(call).toHaveBeenCalledWith('save_notebook_results', expect.anything());
         });
 
         it('restores cached results when loading a notebook', async () => {
