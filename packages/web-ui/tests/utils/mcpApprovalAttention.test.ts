@@ -251,6 +251,17 @@ describe('mcpApprovalAttention', () => {
         expect(createOscillator).toHaveBeenCalledTimes(1);
     });
 
+    it('resolves without a native window so browsers still reach the notification', async () => {
+        getCurrentWindow.mockImplementation(() => {
+            throw new TypeError("Cannot read properties of undefined (reading 'metadata')");
+        });
+
+        const attention = await import('@/utils/mcpApprovalAttention');
+
+        await expect(attention.focusWindowForApproval('approval-A')).resolves.toBeUndefined();
+        await expect(attention.restoreWindowAlwaysOnTop('approval-A')).resolves.toBeUndefined();
+    });
+
     it('captures fresh snapshot when approval ID changes (prevents stale snapshot)', async () => {
         const appWindow = {
             isAlwaysOnTop: vi.fn().mockResolvedValue(false),

@@ -62,7 +62,13 @@ function isCurrentApprovalAttention(approvalId: string, version: number): boolea
 }
 
 export async function focusWindowForApproval(approvalId: string): Promise<void> {
-    const appWindow = getCurrentWindow();
+    let appWindow: ReturnType<typeof getCurrentWindow>;
+    try {
+        appWindow = getCurrentWindow();
+    } catch {
+        // Browser: no native window, and throwing here used to skip the notification.
+        return;
+    }
 
     approvalAttentionOwnerId = approvalId;
     const version = ++approvalAttentionVersion;
