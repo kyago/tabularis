@@ -1,4 +1,4 @@
-import type {NotebookCell, NotebookFile, NotebookParam} from '@/types/notebook';
+import type {NotebookCell, NotebookFile, NotebookParam, ReportWidth} from '@/types/notebook';
 import {generateCellId} from './notebook';
 import {validateParamName} from './notebookParams';
 
@@ -7,6 +7,12 @@ import {validateParamName} from './notebookParams';
  * a valid identifier (`\w+`) and value must be a string. Malformed entries
  * are dropped instead of failing the whole import.
  */
+const REPORT_WIDTHS: readonly ReportWidth[] = ['full', 'half', 'third'];
+
+function sanitizeReportWidth(raw: unknown): ReportWidth | undefined {
+    return REPORT_WIDTHS.find((w) => w === raw);
+}
+
 function sanitizeParams(raw: unknown): NotebookParam[] | undefined {
     if (!Array.isArray(raw)) return undefined;
     const params = raw.filter((p): p is NotebookParam => {
@@ -41,6 +47,8 @@ export function serializeNotebook(
             ...(c.isResultCollapsed ? {isResultCollapsed: c.isResultCollapsed} : {}),
             ...(c.isChartVisible != null ? {isChartVisible: c.isChartVisible} : {}),
             ...(c.isQueryPlanVisible != null ? {isQueryPlanVisible: c.isQueryPlanVisible} : {}),
+            ...(c.isReportHidden ? {isReportHidden: true} : {}),
+            ...(c.reportWidth ? {reportWidth: c.reportWidth} : {}),
         })),
         ...(params && params.length > 0 ? {params} : {}),
         ...(stopOnError ? {stopOnError} : {}),
@@ -99,6 +107,8 @@ export function deserializeNotebook(json: string): {
                 isResultCollapsed: cellRaw.isResultCollapsed as boolean | undefined,
                 isChartVisible: cellRaw.isChartVisible as boolean | undefined,
                 isQueryPlanVisible: cellRaw.isQueryPlanVisible as boolean | undefined,
+                isReportHidden: cellRaw.isReportHidden === true ? true : undefined,
+                reportWidth: sanitizeReportWidth(cellRaw.reportWidth),
                 result: null,
                 error: undefined,
                 executionTime: null,

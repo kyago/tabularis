@@ -19,6 +19,9 @@ export type ChartType =
     | 'radar'
     | 'funnel';
 
+/** Report-view tile width: full row, half or a third of the 6-column grid. */
+export type ReportWidth = 'full' | 'half' | 'third';
+
 export interface CellChartConfig {
     type: ChartType;
     labelColumn: string;
@@ -69,6 +72,9 @@ export interface NotebookCell {
     isChartVisible?: boolean; // SQL only: chart section visible (defaults to whether chartConfig is set)
     isQueryPlanVisible?: boolean; // SQL only: query plan (EXPLAIN) section visible, off by default
     history?: CellExecutionEntry[]; // Last N executions
+    isReportHidden?: boolean; // Omitted from report view (e.g. setup queries)
+    reportWidth?: ReportWidth; // Report-view tile width, defaults to full
+    cachedAt?: number; // Runtime only: result restored from the result cache at this time (ms)
 }
 
 export interface NotebookState {
@@ -95,6 +101,8 @@ export interface NotebookFile {
         isResultCollapsed?: boolean;
         isChartVisible?: boolean;
         isQueryPlanVisible?: boolean;
+        isReportHidden?: boolean;
+        reportWidth?: ReportWidth;
     }>;
     params?: NotebookParam[];
     stopOnError?: boolean;

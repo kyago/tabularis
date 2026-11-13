@@ -482,4 +482,33 @@ describe('notebookFile utils', () => {
             expect(result.cells[1].isChartVisible).toBeUndefined();
         });
     });
+    describe('report view fields', () => {
+        it('round-trips report inclusion and width', () => {
+            const cells = makeCells();
+            cells[0] = {...cells[0], isReportHidden: true, reportWidth: 'half'};
+            const file = serializeNotebook('T', cells);
+            expect(file.cells[0]).toMatchObject({isReportHidden: true, reportWidth: 'half'});
+            const back = deserializeNotebook(JSON.stringify(file));
+            expect(back.cells[0].isReportHidden).toBe(true);
+            expect(back.cells[0].reportWidth).toBe('half');
+        });
+
+        it('omits report fields when unset', () => {
+            const file = serializeNotebook('T', makeCells());
+            expect(file.cells[1]).not.toHaveProperty('isReportHidden');
+            expect(file.cells[1]).not.toHaveProperty('reportWidth');
+        });
+
+        it('drops an unknown report width from untrusted files', () => {
+            const json = JSON.stringify({
+                version: 2,
+                title: 'T',
+                createdAt: '',
+                cells: [{type: 'sql', content: 'SELECT 1', reportWidth: 'quarter', isReportHidden: 'yes'}],
+            });
+            const back = deserializeNotebook(json);
+            expect(back.cells[0].reportWidth).toBeUndefined();
+            expect(back.cells[0].isReportHidden).toBeUndefined();
+        });
+    });
 });
