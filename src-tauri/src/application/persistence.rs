@@ -90,6 +90,9 @@ pub async fn execute(
     session_id: Option<Uuid>,
     command: PersistenceCommand,
 ) -> Result<Value, String> {
+    // Local single-user runtime: browser tabs and open connections live in the data
+    // folder like the desktop app's, so a server restart doesn't wipe them.
+    let restore_session: Option<Uuid> = None;
     match command {
         PersistenceCommand::GetConfig => json(config_for_session(runtime, state, session_id)),
         PersistenceCommand::SaveConfig(config) => {
@@ -124,29 +127,29 @@ pub async fn execute(
         PersistenceCommand::LoadEditorPreferences(connection_id) => json(load_editor_preferences(
             runtime,
             state,
-            session_id,
+            restore_session,
             &connection_id,
         )?),
         PersistenceCommand::SaveEditorPreferences(connection_id, preferences) => {
-            save_editor_preferences(runtime, state, session_id, &connection_id, preferences)?;
+            save_editor_preferences(runtime, state, restore_session, &connection_id, preferences)?;
             Ok(Value::Null)
         }
         PersistenceCommand::DeleteEditorPreferences(connection_id) => {
-            delete_editor_preferences(runtime, state, session_id, &connection_id)?;
+            delete_editor_preferences(runtime, state, restore_session, &connection_id)?;
             Ok(Value::Null)
         }
         PersistenceCommand::GetLastActiveConnection => {
-            json(last_active_connection(runtime, state, session_id))
+            json(last_active_connection(runtime, state, restore_session))
         }
         PersistenceCommand::SetLastActiveConnection(connection_id) => {
-            set_last_active_connection(runtime, state, session_id, connection_id)?;
+            set_last_active_connection(runtime, state, restore_session, connection_id)?;
             Ok(Value::Null)
         }
         PersistenceCommand::GetLastOpenConnections => {
-            json(last_open_connections(runtime, state, session_id))
+            json(last_open_connections(runtime, state, restore_session))
         }
         PersistenceCommand::SetLastOpenConnections(connection_ids) => {
-            set_last_open_connections(runtime, state, session_id, connection_ids)?;
+            set_last_open_connections(runtime, state, restore_session, connection_ids)?;
             Ok(Value::Null)
         }
     }

@@ -81,7 +81,7 @@ fn custom_theme(id: &str) -> Value {
 }
 
 #[tokio::test]
-async fn browser_editor_and_connection_preferences_are_isolated_by_session() {
+async fn browser_editor_and_connection_preferences_survive_a_new_session() {
     let temp = tempfile::tempdir().unwrap();
     let runtime = runtime(temp.path());
     let state = ApplicationState::default();
@@ -136,7 +136,7 @@ async fn browser_editor_and_connection_preferences_are_isolated_by_session() {
         )
         .await
         .unwrap(),
-        Value::Null
+        serde_json::to_value(editor_preferences("Session A")).unwrap()
     );
     assert_eq!(
         execute(
@@ -147,10 +147,20 @@ async fn browser_editor_and_connection_preferences_are_isolated_by_session() {
         )
         .await
         .unwrap(),
-        serde_json::json!([])
+        serde_json::json!(["connection-1"])
     );
-    assert!(!temp.path().join(PREFERENCES_DIR).exists());
-    assert!(!temp.path().join(CONFIG_FILE).exists());
+    // A fresh state is what a restarted server sees.
+    assert_eq!(
+        execute(
+            &runtime,
+            &ApplicationState::default(),
+            Some(session_b),
+            PersistenceCommand::GetLastActiveConnection,
+        )
+        .await
+        .unwrap(),
+        serde_json::json!("connection-1")
+    );
 }
 
 #[tokio::test]

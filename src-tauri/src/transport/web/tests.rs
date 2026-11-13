@@ -1741,7 +1741,6 @@ async fn executes_representative_commands_over_versioned_rpc() {
         .await,
         "metadata-fixture"
     );
-    assert!(!temp.path().join("preferences").exists());
 
     let saved_query = rpc_data(
         &client,
