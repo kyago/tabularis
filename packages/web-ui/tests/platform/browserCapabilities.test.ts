@@ -147,6 +147,37 @@ describe('BrowserPlatformCapabilities browser adaptations', () => {
         unsubscribe();
     });
 
+    it('asks for notification permission on the first click and focuses the tab from a notification', async () => {
+        const instances: {onclick: (() => void) | null; close: ReturnType<typeof vi.fn>}[] = [];
+        class StubNotification {
+            static permission: NotificationPermission = 'default';
+            static requestPermission = vi.fn().mockImplementation(async () => {
+                StubNotification.permission = 'granted';
+                return 'granted' as NotificationPermission;
+            });
+            onclick: (() => void) | null = null;
+            close = vi.fn();
+            constructor() {
+                instances.push(this);
+            }
+        }
+        vi.stubGlobal('Notification', StubNotification);
+        const focus = vi.spyOn(window, 'focus').mockImplementation(() => {});
+        const capabilities = new BrowserPlatformCapabilities(clientFixture({}));
+
+        window.dispatchEvent(new Event('pointerdown'));
+        window.dispatchEvent(new Event('pointerdown'));
+        expect(StubNotification.requestPermission).toHaveBeenCalledOnce();
+
+        await expect(capabilities.notify({title: 'Approve'})).resolves.toBe('shown');
+        instances[0].onclick?.();
+        expect(focus).toHaveBeenCalledOnce();
+        expect(instances[0].close).toHaveBeenCalledOnce();
+
+        focus.mockRestore();
+        vi.unstubAllGlobals();
+    });
+
     it('falls back in-app when browser notification permission is denied', async () => {
         class DeniedNotification {
             static permission: NotificationPermission = 'default';

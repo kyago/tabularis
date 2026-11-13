@@ -101,6 +101,13 @@ export class BrowserPlatformCapabilities implements PlatformCapabilities {
         this.client = client;
         this.filePicker = filePicker;
         this.negotiation = browserCapabilityNegotiation(serverFileBrowser);
+        // Browsers ignore permission prompts no click started, and a prompt that only
+        // appears when an AI approval arrives would never get granted.
+        if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+            window.addEventListener('pointerdown', () => void Notification.requestPermission(), {
+                once: true,
+            });
+        }
     }
 
     supports(capability: PlatformCapabilityName): boolean {
@@ -295,7 +302,12 @@ export class BrowserPlatformCapabilities implements PlatformCapabilities {
                 await Notification.requestPermission();
             }
             if (Notification.permission === 'granted') {
-                new Notification(notification.title, {body: notification.body});
+                const shown = new Notification(notification.title, {body: notification.body});
+                // Clicking the macOS notification brings the browser and this tab to the front.
+                shown.onclick = () => {
+                    window.focus();
+                    shown.close();
+                };
                 return 'shown';
             }
         } catch {
