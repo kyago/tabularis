@@ -69,6 +69,7 @@ import {useKeybindings} from '@/hooks/useKeybindings';
 import {DANGEROUS_QUERY_I18N} from '@/hooks/useDangerousQueryGuard';
 import {useQueryGuards} from '@/hooks/useQueryGuards';
 import {ConfirmModal} from '@/components/modals/ConfirmModal';
+import {NotebookReportView} from './NotebookReportView';
 import {NotebookToolbar} from './NotebookToolbar';
 import {NotebookHistoryPanel} from './NotebookHistoryPanel';
 import {NotebookCellWrapper} from './NotebookCellWrapper';
@@ -138,6 +139,8 @@ export function NotebookView({tab, updateTab, connectionId, isActive}: NotebookV
     const historyRef = useRef<NotebookHistory>(history);
     const isActiveRef = useRef(isActive);
     const [showHistory, setShowHistory] = useState(false);
+    // Presentation only: not persisted, so reopening a notebook starts in edit view.
+    const [viewMode, setViewMode] = useState<'edit' | 'report'>('edit');
     const canUndo = history.past.length > 0;
     const canRedo = history.future.length > 0;
 
@@ -798,6 +801,8 @@ export function NotebookView({tab, updateTab, connectionId, isActive}: NotebookV
     }, [isExecuting, updateNotebook]);
 
     const toolbarProps = {
+        viewMode,
+        onToggleViewMode: () => setViewMode((mode) => (mode === 'edit' ? 'report' : 'edit')),
         onAddSqlCell: () => addCell('sql'),
         onAddMarkdownCell: () => addCell('markdown'),
         onRunAll: runAll,
@@ -905,87 +910,101 @@ export function NotebookView({tab, updateTab, connectionId, isActive}: NotebookV
                 onDragOver={handleContainerDragOver}
                 className="flex-1 overflow-auto p-4 space-y-0"
             >
-                <ParamsPanel params={params} onParamsChange={handleParamsChange} />
-                <NotebookOutline
-                    cells={cells}
-                    onScrollToCell={scrollToCell}
-                    onCellNameGenerated={(cellId, name) => updateCell(cellId, {name})}
-                />
-
-                {runAllResult && (
-                    <RunAllSummary
-                        result={runAllResult}
-                        onDismiss={() => setRunAllResult(null)}
-                        onScrollToCell={scrollToCell}
+                {viewMode === 'report' ? (
+                    <NotebookReportView
+                        cells={cells}
+                        params={params}
+                        onParamsChange={handleParamsChange}
+                        onRunAll={runAll}
+                        isRunning={isRunningAll}
                     />
-                )}
+                ) : (
+                    <>
+                        <ParamsPanel params={params} onParamsChange={handleParamsChange} />
+                        <NotebookOutline
+                            cells={cells}
+                            onScrollToCell={scrollToCell}
+                            onCellNameGenerated={(cellId, name) => updateCell(cellId, {name})}
+                        />
 
-                <AddCellButton
-                    onAddSql={() => addCell('sql', -1)}
-                    onAddMarkdown={() => addCell('markdown', -1)}
-                />
-                {cells.map((cell, index) => (
-                    <div
-                        key={cell.id}
-                        ref={(el) => {
-                            if (el) cellRefsMap.current.set(cell.id, el);
-                            else cellRefsMap.current.delete(cell.id);
-                        }}
-                        onDragOver={handleDragOver(index)}
-                        onDrop={handleDrop(index)}
-                        className="relative scroll-mt-4"
-                    >
-                        {showLineAt(index) && renderDropLine('top')}
-                        <NotebookCellWrapper
-                            cell={cell}
-                            index={index}
-                            totalCells={cells.length}
-                            onUpdate={(partial) => updateCell(cell.id, partial)}
-                            onDelete={() => deleteCell(cell.id)}
-                            onMoveUp={() => {
-                                if (index > 0)
-                                    updateNotebook(
-                                        reorderCells(cellsRef.current, index, index - 1),
-                                    );
-                            }}
-                            onMoveDown={() => {
-                                if (index < cells.length - 1)
-                                    updateNotebook(
-                                        reorderCells(cellsRef.current, index, index + 1),
-                                    );
-                            }}
-                            onRun={() => runCell(cell.id)}
-                            connectionId={connectionId}
-                            explainQuery={
-                                cell.type === 'sql' && cell.isQueryPlanVisible
-                                    ? resolveQueryVariables(
-                                          resolveParams(cell.content.trim(), params).sql,
-                                          cells,
-                                          variableOptions,
-                                      )
-                                    : undefined
-                            }
-                            activeSchema={cell.schema || effectiveSchema || undefined}
-                            selectedDatabases={isMultiDb ? selectedDatabases : undefined}
-                            onSchemaChange={
-                                isMultiDb ? (schema) => updateCell(cell.id, {schema}) : undefined
-                            }
-                            isDragging={dragIndex === index}
-                            dragHandleProps={{
-                                draggable: true,
-                                onDragStart: handleDragStart(index),
-                                onDragEnd: handleDragEnd,
-                            }}
-                        />
+                        {runAllResult && (
+                            <RunAllSummary
+                                result={runAllResult}
+                                onDismiss={() => setRunAllResult(null)}
+                                onScrollToCell={scrollToCell}
+                            />
+                        )}
+
                         <AddCellButton
-                            onAddSql={() => addCell('sql', index)}
-                            onAddMarkdown={() => addCell('markdown', index)}
+                            onAddSql={() => addCell('sql', -1)}
+                            onAddMarkdown={() => addCell('markdown', -1)}
                         />
-                        {index === cells.length - 1 &&
-                            showLineAt(cells.length) &&
-                            renderDropLine('bottom')}
-                    </div>
-                ))}
+                        {cells.map((cell, index) => (
+                            <div
+                                key={cell.id}
+                                ref={(el) => {
+                                    if (el) cellRefsMap.current.set(cell.id, el);
+                                    else cellRefsMap.current.delete(cell.id);
+                                }}
+                                onDragOver={handleDragOver(index)}
+                                onDrop={handleDrop(index)}
+                                className="relative scroll-mt-4"
+                            >
+                                {showLineAt(index) && renderDropLine('top')}
+                                <NotebookCellWrapper
+                                    cell={cell}
+                                    index={index}
+                                    totalCells={cells.length}
+                                    onUpdate={(partial) => updateCell(cell.id, partial)}
+                                    onDelete={() => deleteCell(cell.id)}
+                                    onMoveUp={() => {
+                                        if (index > 0)
+                                            updateNotebook(
+                                                reorderCells(cellsRef.current, index, index - 1),
+                                            );
+                                    }}
+                                    onMoveDown={() => {
+                                        if (index < cells.length - 1)
+                                            updateNotebook(
+                                                reorderCells(cellsRef.current, index, index + 1),
+                                            );
+                                    }}
+                                    onRun={() => runCell(cell.id)}
+                                    connectionId={connectionId}
+                                    explainQuery={
+                                        cell.type === 'sql' && cell.isQueryPlanVisible
+                                            ? resolveQueryVariables(
+                                                  resolveParams(cell.content.trim(), params).sql,
+                                                  cells,
+                                                  variableOptions,
+                                              )
+                                            : undefined
+                                    }
+                                    activeSchema={cell.schema || effectiveSchema || undefined}
+                                    selectedDatabases={isMultiDb ? selectedDatabases : undefined}
+                                    onSchemaChange={
+                                        isMultiDb
+                                            ? (schema) => updateCell(cell.id, {schema})
+                                            : undefined
+                                    }
+                                    isDragging={dragIndex === index}
+                                    dragHandleProps={{
+                                        draggable: true,
+                                        onDragStart: handleDragStart(index),
+                                        onDragEnd: handleDragEnd,
+                                    }}
+                                />
+                                <AddCellButton
+                                    onAddSql={() => addCell('sql', index)}
+                                    onAddMarkdown={() => addCell('markdown', index)}
+                                />
+                                {index === cells.length - 1 &&
+                                    showLineAt(cells.length) &&
+                                    renderDropLine('bottom')}
+                            </div>
+                        ))}
+                    </>
+                )}
             </div>
         </div>
     );

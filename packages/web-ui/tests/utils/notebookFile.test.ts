@@ -504,7 +504,14 @@ describe('notebookFile utils', () => {
                 version: 2,
                 title: 'T',
                 createdAt: '',
-                cells: [{type: 'sql', content: 'SELECT 1', reportWidth: 'quarter', isReportHidden: 'yes'}],
+                cells: [
+                    {
+                        type: 'sql',
+                        content: 'SELECT 1',
+                        reportWidth: 'quarter',
+                        isReportHidden: 'yes',
+                    },
+                ],
             });
             const back = deserializeNotebook(json);
             expect(back.cells[0].reportWidth).toBeUndefined();

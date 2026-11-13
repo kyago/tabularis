@@ -15,9 +15,11 @@ import {
     Zap,
     History,
     Network,
+    EyeOff,
 } from 'lucide-react';
 import type {NotebookCellType} from '@/types/notebook';
 import {CellNameAiButton} from './CellNameAiButton';
+import type {ReportWidth} from '@/types/notebook';
 import {useEscapeKey} from '@/hooks/useEscapeKey';
 
 interface NotebookCellHeaderProps {
@@ -50,6 +52,10 @@ interface NotebookCellHeaderProps {
     cellName?: string;
     onNameChange: (name: string) => void;
     cellContent?: string;
+    isReportHidden?: boolean;
+    onToggleReportHidden?: () => void;
+    reportWidth?: ReportWidth;
+    onReportWidthChange?: (width: ReportWidth) => void;
 }
 
 function CellTypeBadge({cellType}: {cellType: NotebookCellType}) {
@@ -120,6 +126,10 @@ export function NotebookCellHeader({
     cellName,
     onNameChange,
     cellContent,
+    isReportHidden,
+    onToggleReportHidden,
+    reportWidth,
+    onReportWidthChange,
 }: NotebookCellHeaderProps) {
     const {t} = useTranslation();
     const [isDbOpen, setIsDbOpen] = useState(false);
@@ -360,6 +370,41 @@ export function NotebookCellHeader({
                     >
                         {isPreview ? <Pencil size={14} /> : <Eye size={14} />}
                     </ActionButton>
+                )}
+
+                {onReportWidthChange && (
+                    <select
+                        value={reportWidth ?? 'full'}
+                        onChange={(e) => onReportWidthChange(e.target.value as ReportWidth)}
+                        aria-label={t('editor.notebook.reportWidth')}
+                        title={t('editor.notebook.reportWidth')}
+                        className="h-6 px-1 text-[10px] bg-base border border-default rounded text-secondary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
+                    >
+                        <option value="full">{t('editor.notebook.reportWidthFull')}</option>
+                        <option value="half">{t('editor.notebook.reportWidthHalf')}</option>
+                        <option value="third">{t('editor.notebook.reportWidthThird')}</option>
+                    </select>
+                )}
+
+                {onToggleReportHidden && (
+                    <button
+                        type="button"
+                        onClick={onToggleReportHidden}
+                        aria-label={t('editor.notebook.excludeFromReport')}
+                        aria-pressed={!!isReportHidden}
+                        title={t(
+                            isReportHidden
+                                ? 'editor.notebook.includeInReport'
+                                : 'editor.notebook.excludeFromReport',
+                        )}
+                        className={`p-1 rounded transition-colors ${
+                            isReportHidden
+                                ? 'text-accent-warning bg-accent-warning/15'
+                                : 'text-muted hover:text-primary hover:bg-surface-secondary'
+                        }`}
+                    >
+                        <EyeOff size={14} />
+                    </button>
                 )}
 
                 <ActionButton

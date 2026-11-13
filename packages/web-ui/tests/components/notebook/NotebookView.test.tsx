@@ -98,6 +98,14 @@ vi.mock('@/components/notebook/RunAllSummary', () => ({
     ),
 }));
 vi.mock('@/components/notebook/ParamsPanel', () => ({ParamsPanel: () => null}));
+vi.mock('@/components/notebook/NotebookReportView', () => ({
+    NotebookReportView: ({cells, onRunAll}: {cells: NotebookCell[]; onRunAll: () => void}) => (
+        <div data-testid="report">
+            {cells.map((c) => c.id).join(',')}
+            <button onClick={onRunAll}>Report run all</button>
+        </div>
+    ),
+}));
 vi.mock('@/components/notebook/NotebookOutline', () => ({NotebookOutline: () => null}));
 vi.mock('@/components/notebook/NotebookToolbar', () => ({
     NotebookToolbar: ({
@@ -107,8 +115,13 @@ vi.mock('@/components/notebook/NotebookToolbar', () => ({
         canClearOutputs,
         onUndo,
         canUndo,
+        viewMode,
+        onToggleViewMode,
     }: ComponentProps<typeof NotebookToolbar>) => (
         <>
+            <button onClick={onToggleViewMode} aria-pressed={viewMode === 'report'}>
+                Toggle report
+            </button>
             <button onClick={onRunAll} disabled={isRunning}>
                 Run All
             </button>
@@ -828,6 +841,25 @@ describe('NotebookView', () => {
 
             expect(clearButton()).toBeDisabled();
             expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        });
+    });
+    describe('report view', () => {
+        it('switches to report view without executing and restores the cells on return', async () => {
+            renderNotebook({
+                cells: [sqlCell('a', 'SELECT 1', {result: queryResult, isQueryCollapsed: true})],
+            });
+            await settle();
+            fireEvent.click(screen.getByRole('button', {name: 'Toggle report'}));
+            await settle();
+            expect(screen.queryByTestId('cell-a')).toBeNull();
+            expect(screen.getByTestId('report').textContent).toContain('a');
+            expect(mockInvoke).not.toHaveBeenCalled();
+
+            fireEvent.click(screen.getByRole('button', {name: 'Toggle report'}));
+            await settle();
+            expect(screen.getByTestId('cell-a')).toBeTruthy();
+            expect(savedCell('a').result).toBe(queryResult);
+            expect(savedCell('a').isQueryCollapsed).toBe(true);
         });
     });
 });

@@ -47,7 +47,11 @@ function TileBody({cell}: {cell: NotebookCell}) {
         case 'error':
             return <ErrorDisplay error={cell.error!} t={t} />;
         case 'empty':
-            return <p className="p-6 text-xs text-muted text-center">{t('editor.notebook.reportNotRun')}</p>;
+            return (
+                <p className="p-6 text-xs text-muted text-center">
+                    {t('editor.notebook.reportNotRun')}
+                </p>
+            );
     }
 }
 
@@ -71,7 +75,7 @@ export function NotebookReportView({
                     type="button"
                     onClick={onRunAll}
                     disabled={isRunning}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-accent-primary text-on-accent hover:opacity-90 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-primary"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-accent-primary text-on-accent hover:opacity-90 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
                 >
                     <Play size={12} aria-hidden="true" />
                     {t('editor.notebook.runAll')}
@@ -79,7 +83,9 @@ export function NotebookReportView({
             </div>
 
             {visible.length === 0 ? (
-                <p className="p-8 text-sm text-muted text-center">{t('editor.notebook.reportEmpty')}</p>
+                <p className="p-8 text-sm text-muted text-center">
+                    {t('editor.notebook.reportEmpty')}
+                </p>
             ) : (
                 <div className="grid grid-cols-6 gap-3">
                     {visible.map((cell) => (
@@ -89,7 +95,9 @@ export function NotebookReportView({
                         >
                             {(cell.name || cell.cachedAt) && (
                                 <header className="flex items-center justify-between gap-2 px-3 py-2 border-b border-default">
-                                    <h3 className="text-sm font-medium text-primary truncate">{cell.name}</h3>
+                                    <h3 className="text-sm font-medium text-primary truncate">
+                                        {cell.name}
+                                    </h3>
                                     {cell.cachedAt && (
                                         <span className="text-[10px] text-muted shrink-0">
                                             {t('editor.notebook.cachedAt', {

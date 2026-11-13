@@ -30,7 +30,13 @@ const cells: NotebookCell[] = [
         reportWidth: 'half',
     },
     {id: 'table', type: 'sql', content: 'SELECT * FROM t', result},
-    {id: 'setup', type: 'sql', name: 'Setup temp table', content: 'CREATE TEMP', isReportHidden: true},
+    {
+        id: 'setup',
+        type: 'sql',
+        name: 'Setup temp table',
+        content: 'CREATE TEMP',
+        isReportHidden: true,
+    },
     {id: 'pending', type: 'sql', content: 'SELECT 2'},
 ];
 
@@ -68,7 +74,9 @@ describe('NotebookReportView', () => {
 
     it('applies the configured tile width', () => {
         renderView();
-        expect(screen.getByText('Revenue').closest('section')!.className).toContain('md:col-span-3');
+        expect(screen.getByText('Revenue').closest('section')!.className).toContain(
+            'md:col-span-3',
+        );
     });
 
     it('shows an empty state when every cell is excluded', () => {

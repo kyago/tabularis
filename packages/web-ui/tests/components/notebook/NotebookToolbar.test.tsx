@@ -4,7 +4,7 @@ import {NotebookToolbar} from '@/components/notebook/NotebookToolbar';
 
 vi.mock('lucide-react', async (importOriginal) => await importOriginal());
 
-function renderToolbar() {
+function renderToolbar(overrides: Record<string, unknown> = {}) {
     const props = {
         onAddSqlCell: vi.fn(),
         onAddMarkdownCell: vi.fn(),
@@ -24,6 +24,9 @@ function renderToolbar() {
         canRedo: false,
         onToggleHistory: vi.fn(),
         historyOpen: false,
+        viewMode: 'edit' as const,
+        onToggleViewMode: vi.fn(),
+        ...overrides,
     };
     render(<NotebookToolbar {...props} />);
     return props;
@@ -42,5 +45,21 @@ describe('NotebookToolbar', () => {
         expect(props.onExportSql).toHaveBeenCalledOnce();
         expect(props.onExport).not.toHaveBeenCalled();
         expect(props.onExportHtml).not.toHaveBeenCalled();
+    });
+    it('toggles between edit and report view', () => {
+        const props = renderToolbar();
+        const toggle = screen.getByRole('button', {name: 'editor.notebook.viewReport'});
+        expect(toggle.getAttribute('aria-pressed')).toBe('false');
+        fireEvent.click(toggle);
+        expect(props.onToggleViewMode).toHaveBeenCalledOnce();
+    });
+
+    it('marks the report toggle pressed in report view', () => {
+        renderToolbar({viewMode: 'report'});
+        expect(
+            screen
+                .getByRole('button', {name: 'editor.notebook.viewReport'})
+                .getAttribute('aria-pressed'),
+        ).toBe('true');
     });
 });

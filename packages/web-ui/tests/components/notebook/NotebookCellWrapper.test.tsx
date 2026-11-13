@@ -328,3 +328,38 @@ describe('NotebookCellWrapper query plans', () => {
         expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
 });
+
+describe('NotebookCellWrapper report controls', () => {
+    beforeEach(() => {
+        database.getConnectionData.mockReset().mockReturnValue(undefined);
+    });
+
+    it('excludes the cell from the report through onUpdate', async () => {
+        const props = makeProps();
+        render(<NotebookCellWrapper {...props} />);
+        await settle();
+        const toggle = screen.getByRole('button', {name: 'editor.notebook.excludeFromReport'});
+        expect(toggle).toHaveAttribute('aria-pressed', 'false');
+        fireEvent.click(toggle);
+        expect(props.onUpdate).toHaveBeenCalledWith({isReportHidden: true});
+    });
+
+    it('re-includes an excluded cell', async () => {
+        const props = makeProps();
+        props.cell = {...props.cell, isReportHidden: true};
+        render(<NotebookCellWrapper {...props} />);
+        await settle();
+        fireEvent.click(screen.getByRole('button', {name: 'editor.notebook.excludeFromReport'}));
+        expect(props.onUpdate).toHaveBeenCalledWith({isReportHidden: false});
+    });
+
+    it('sets the report tile width through onUpdate', async () => {
+        const props = makeProps();
+        render(<NotebookCellWrapper {...props} />);
+        await settle();
+        const select = screen.getByRole('combobox', {name: 'editor.notebook.reportWidth'});
+        expect(select).toHaveValue('full');
+        fireEvent.change(select, {target: {value: 'half'}});
+        expect(props.onUpdate).toHaveBeenCalledWith({reportWidth: 'half'});
+    });
+});

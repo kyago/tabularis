@@ -18,6 +18,7 @@ import {
     Redo2,
     History,
     Eraser,
+    LayoutDashboard,
 } from 'lucide-react';
 import {ContextMenu, type ContextMenuItem} from '@/components/ui/ContextMenu';
 
@@ -42,6 +43,8 @@ interface NotebookToolbarProps {
     canRedo: boolean;
     onToggleHistory: () => void;
     historyOpen: boolean;
+    viewMode: 'edit' | 'report';
+    onToggleViewMode: () => void;
 }
 
 function ToolbarButton({
@@ -97,6 +100,8 @@ export function NotebookToolbar({
     canRedo,
     onToggleHistory,
     historyOpen,
+    viewMode,
+    onToggleViewMode,
 }: NotebookToolbarProps) {
     const {t} = useTranslation();
     const [menu, setMenu] = useState<{
@@ -144,6 +149,26 @@ export function NotebookToolbar({
                 <Plus size={14} />
                 <span className="hidden @[440px]:inline">{t('editor.notebook.addCell')}</span>
                 <ChevronDown size={12} className="text-muted" />
+            </button>
+
+            <button
+                type="button"
+                onClick={onToggleViewMode}
+                aria-pressed={viewMode === 'report'}
+                aria-label={t('editor.notebook.viewReport')}
+                title={t(
+                    viewMode === 'report'
+                        ? 'editor.notebook.viewEdit'
+                        : 'editor.notebook.viewReport',
+                )}
+                className={`flex items-center gap-1.5 px-2 py-1 text-xs rounded transition-colors shrink-0 ${
+                    viewMode === 'report'
+                        ? 'bg-surface-secondary text-primary'
+                        : 'text-secondary hover:text-primary hover:bg-surface-secondary'
+                }`}
+            >
+                <LayoutDashboard size={14} />
+                <span className="hidden @[440px]:inline">{t('editor.notebook.viewReport')}</span>
             </button>
 
             <Separator />

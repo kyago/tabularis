@@ -467,7 +467,11 @@ export function CellChart({result, config, onConfigChange, height = 250}: CellCh
     return (
         <div className="border-t border-default">
             {onConfigChange && (
-                <ChartTypeSelector config={config} result={result} onConfigChange={onConfigChange} />
+                <ChartTypeSelector
+                    config={config}
+                    result={result}
+                    onConfigChange={onConfigChange}
+                />
             )}
             <div style={{height}} className="p-2">
                 {needsTwo ? (

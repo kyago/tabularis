@@ -23,7 +23,10 @@ describe('reportTileContent', () => {
         ['not run', sql(), 'empty'],
         [
             'chart',
-            sql({result, chartConfig: {type: 'bar', labelColumn: 'region', valueColumns: ['revenue']}}),
+            sql({
+                result,
+                chartConfig: {type: 'bar', labelColumn: 'region', valueColumns: ['revenue']},
+            }),
             'chart',
         ],
         [
