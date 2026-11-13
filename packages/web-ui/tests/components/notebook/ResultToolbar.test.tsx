@@ -207,3 +207,25 @@ describe('ResultToolbar CSV delimiter', () => {
         );
     });
 });
+
+describe('ResultToolbar cached marker', () => {
+    beforeEach(() => useCsvDelimiter(','));
+
+    it('shows when the result was restored from the cache', () => {
+        render(
+            <AlertContext.Provider value={{showAlert}}>
+                <ResultToolbar result={result} executionTime={1} cachedAt={1_700_000_000_000} />
+            </AlertContext.Provider>,
+        );
+        expect(screen.getByText(/cachedAt/)).toBeTruthy();
+    });
+
+    it('stays hidden for a live result', () => {
+        render(
+            <AlertContext.Provider value={{showAlert}}>
+                <ResultToolbar result={result} executionTime={1} />
+            </AlertContext.Provider>,
+        );
+        expect(screen.queryByText(/cachedAt/)).toBeNull();
+    });
+});

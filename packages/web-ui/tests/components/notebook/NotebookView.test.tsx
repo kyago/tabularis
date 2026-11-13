@@ -844,6 +844,14 @@ describe('NotebookView', () => {
         });
     });
     describe('report view', () => {
+        it('drops the cached marker when a cell runs again', async () => {
+            renderNotebook({cells: [sqlCell('a', 'SELECT 1', {result: queryResult, cachedAt: 5})]});
+            await settle();
+            fireEvent.click(screen.getByRole('button', {name: 'Run a'}));
+            await waitFor(() => expect(savedCell('a').isLoading).toBe(false));
+            expect(savedCell('a').cachedAt).toBeUndefined();
+        });
+
         it('switches to report view without executing and restores the cells on return', async () => {
             renderNotebook({
                 cells: [sqlCell('a', 'SELECT 1', {result: queryResult, isQueryCollapsed: true})],

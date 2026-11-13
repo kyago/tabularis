@@ -176,6 +176,14 @@ describe('notebook utils', () => {
             expect(clearCellOutputs([])).toEqual([]);
         });
 
+        it('should drop the cached marker with the result', () => {
+            const [cell] = clearCellOutputs([
+                makeCell({id: 'a', result: queryResult, cachedAt: 5}),
+            ]);
+            expect(cell.result).toBeNull();
+            expect(cell.cachedAt).toBeUndefined();
+        });
+
         it('should clear the result, error and execution time of every SQL cell', () => {
             const cleared = clearCellOutputs([
                 makeCell({id: 'ok', result: queryResult, executionTime: 12}),

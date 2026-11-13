@@ -10,13 +10,15 @@ import {useSettings} from '@/hooks/useSettings';
 interface ResultToolbarProps {
     result: QueryResult;
     executionTime?: number | null;
+    /** Set when the result was restored from the result cache instead of a live run. */
+    cachedAt?: number;
 }
 
 /**
  * Row-count / timing summary plus CSV/JSON export buttons, rendered inside the
  * result section header.
  */
-export function ResultToolbar({result, executionTime}: ResultToolbarProps) {
+export function ResultToolbar({result, executionTime, cachedAt}: ResultToolbarProps) {
     const {t} = useTranslation();
     const platform = usePlatformCapabilities();
     const {showAlert} = useAlert();
@@ -42,6 +44,11 @@ export function ResultToolbar({result, executionTime}: ResultToolbarProps) {
 
     return (
         <>
+            {cachedAt != null && (
+                <span className="text-accent-warning">
+                    {t('editor.notebook.cachedAt', {time: new Date(cachedAt).toLocaleString()})}
+                </span>
+            )}
             <span>
                 {t('editor.notebook.cellResult', {
                     count: result.rows.length,

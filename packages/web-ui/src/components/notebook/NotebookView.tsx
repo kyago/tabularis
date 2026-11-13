@@ -338,7 +338,12 @@ export function NotebookView({tab, updateTab, connectionId, isActive}: NotebookV
             const cell = cellsRef.current.find((c) => c.id === cellId);
             if (!cell || cell.type !== 'sql' || !cell.content.trim()) return;
 
-            updateCell(cellId, {isLoading: true, error: undefined, result: null});
+            updateCell(cellId, {
+                isLoading: true,
+                error: undefined,
+                result: null,
+                cachedAt: undefined,
+            });
 
             const pageSize =
                 settings.resultPageSize && settings.resultPageSize > 0

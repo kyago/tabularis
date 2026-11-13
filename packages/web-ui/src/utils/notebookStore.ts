@@ -2,6 +2,7 @@ import type {TypedCommandCaller} from '@/api/contract';
 import type {NotebookMetadata, NotebookState} from '@/types/notebook';
 import {createDefaultNotebookState} from './notebook';
 import {serializeNotebook, deserializeNotebook} from './notebookFile';
+import {applyCachedResults, serializeResults} from './notebookResultCache';
 
 const SAVE_DEBOUNCE_MS = 1500;
 
@@ -27,6 +28,34 @@ const titleCache = new Map<string, string>();
 const connectionIdCache = new Map<string, string>();
 const clientCache = new Map<string, TypedCommandCaller>();
 const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+// Result objects last written to (or restored from) the result cache, per
+// notebook. Results are immutable, so comparing references tells whether a
+// save must also rewrite the (potentially large) result file.
+const savedResults = new Map<string, unknown[]>();
+
+function resultRefs(state: NotebookState): unknown[] {
+    return state.cells.map((c) => c.result ?? null);
+}
+
+function resultsChanged(notebookId: string, state: NotebookState): boolean {
+    const refs = resultRefs(state);
+    const previous = savedResults.get(notebookId);
+    if (!previous) return refs.some((r) => r !== null);
+    return previous.length !== refs.length || refs.some((r, i) => r !== previous[i]);
+}
+
+/** Rewrite the result cache when a cell result changed since the last write. */
+function persistResults(notebookId: string, state: NotebookState): Promise<void> {
+    const connectionId = connectionIdCache.get(notebookId);
+    const client = clientCache.get(notebookId);
+    if (!connectionId || !client || !resultsChanged(notebookId, state)) return Promise.resolve();
+    savedResults.set(notebookId, resultRefs(state));
+    return client.call('save_notebook_results', {
+        connectionId,
+        notebookId,
+        content: serializeResults(state.cells, Date.now()),
+    });
+}
 
 function generateNotebookId(): string {
     return `nb_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 9)}`;
@@ -70,6 +99,7 @@ async function flushSave(notebookId: string): Promise<void> {
 
     const content = serializeForDisk(notebookId, state);
     await persist(notebookId, content);
+    await persistResults(notebookId, state);
 }
 
 /** Schedule a debounced save for a notebook. */
@@ -84,6 +114,9 @@ function scheduleSave(notebookId: string): void {
         const content = serializeForDisk(notebookId, state);
         persist(notebookId, content).catch((e) =>
             console.error(`Failed to auto-save notebook ${notebookId}:`, e),
+        );
+        persistResults(notebookId, state).catch((e) =>
+            console.error(`Failed to save notebook results ${notebookId}:`, e),
         );
     }, SAVE_DEBOUNCE_MS);
 
@@ -139,7 +172,19 @@ export async function loadNotebook(
     }
 
     const {title, cells, params, stopOnError} = deserializeNotebook(content);
-    const state: NotebookState = {cells, params, stopOnError};
+    let cachedResults: string | null = null;
+    try {
+        cachedResults = await client.call('load_notebook_results', {connectionId, notebookId});
+    } catch (e) {
+        // A missing or unreadable cache only costs a re-run; the notebook still opens.
+        console.error(`Failed to load notebook results ${notebookId}:`, e);
+    }
+    const state: NotebookState = {
+        cells: applyCachedResults(cells, cachedResults ?? null),
+        params,
+        stopOnError,
+    };
+    savedResults.set(notebookId, resultRefs(state));
     cache.set(notebookId, state);
     titleCache.set(notebookId, title);
     return state;
@@ -242,6 +287,7 @@ export async function evictFromCache(notebookId: string): Promise<void> {
     titleCache.delete(notebookId);
     connectionIdCache.delete(notebookId);
     clientCache.delete(notebookId);
+    savedResults.delete(notebookId);
 }
 
 /** Flush all pending saves immediately (on app close). */
@@ -258,4 +304,5 @@ export function _resetForTesting(): void {
     titleCache.clear();
     connectionIdCache.clear();
     clientCache.clear();
+    savedResults.clear();
 }

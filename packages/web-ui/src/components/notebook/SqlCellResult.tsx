@@ -13,6 +13,7 @@ interface SqlCellResultProps {
     result: QueryResult | null;
     error?: string;
     executionTime?: number | null;
+    cachedAt?: number;
     isLoading?: boolean;
     chartConfig?: CellChartConfig | null;
     onChartConfigChange?: (config: CellChartConfig | null) => void;
@@ -28,6 +29,7 @@ export function SqlCellResult({
     result,
     error,
     executionTime,
+    cachedAt,
     isLoading,
     chartConfig,
     onChartConfigChange,
@@ -83,7 +85,7 @@ export function SqlCellResult({
                 collapsed={!!isResultCollapsed}
                 onToggle={onToggleResultCollapse}
             >
-                <ResultToolbar result={result} executionTime={executionTime} />
+                <ResultToolbar result={result} executionTime={executionTime} cachedAt={cachedAt} />
             </CellSectionHeader>
             {!isResultCollapsed && (
                 <>

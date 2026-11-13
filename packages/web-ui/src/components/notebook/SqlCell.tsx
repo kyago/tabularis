@@ -53,6 +53,7 @@ export function SqlCell({
                 result={cell.result ?? null}
                 error={cell.error}
                 executionTime={cell.executionTime}
+                cachedAt={cell.cachedAt}
                 isLoading={cell.isLoading}
                 chartConfig={cell.chartConfig}
                 onChartConfigChange={onChartConfigChange}

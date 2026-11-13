@@ -63,7 +63,9 @@ export function hasCellOutputs(cells: NotebookCell[]): boolean {
  */
 export function clearCellOutputs(cells: NotebookCell[]): NotebookCell[] {
     return cells.map((cell) =>
-        hasCellOutput(cell) ? {...cell, result: null, error: undefined, executionTime: null} : cell,
+        hasCellOutput(cell)
+            ? {...cell, result: null, error: undefined, executionTime: null, cachedAt: undefined}
+            : cell,
     );
 }
 

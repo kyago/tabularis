@@ -316,4 +316,81 @@ describe('notebookStore', () => {
             });
         });
     });
+    describe('result cache', () => {
+        const result = {columns: ['n'], rows: [[1]], affected_rows: 0};
+
+        it('saves results only when a cell result changed', async () => {
+            await seedConnection('cache-1');
+            setNotebookState('cache-1', makeState('SELECT 1'));
+            await vi.advanceTimersByTimeAsync(1500);
+            expect(call).not.toHaveBeenCalledWith('save_notebook_results', expect.anything());
+
+            setNotebookState('cache-1', {
+                cells: [{id: 'c1', type: 'sql', content: 'SELECT 1', result}],
+            });
+            await vi.advanceTimersByTimeAsync(1500);
+            expect(call).toHaveBeenCalledWith('save_notebook_results', {
+                connectionId: CONN,
+                notebookId: 'cache-1',
+                content: expect.stringContaining('SELECT 1'),
+            });
+
+            call.mockClear();
+            const same = getNotebookState('cache-1')!;
+            setNotebookState('cache-1', {
+                ...same,
+                cells: same.cells.map((c) => ({...c, name: 'n'})),
+            });
+            await vi.advanceTimersByTimeAsync(1500);
+            expect(call).toHaveBeenCalledWith('save_notebook', expect.anything());
+            expect(call).not.toHaveBeenCalledWith('save_notebook_results', expect.anything());
+        });
+
+        it('restores cached results when loading a notebook', async () => {
+            const fileContent = JSON.stringify({
+                version: 2,
+                title: 'Cached',
+                createdAt: '2026-01-01',
+                cells: [{type: 'sql', content: 'SELECT 1'}],
+            });
+            const cacheContent = JSON.stringify({
+                version: 1,
+                entries: [{content: 'SELECT 1', result, executionTime: 5, timestamp: 700}],
+            });
+            call.mockImplementation(async (command: string) =>
+                command === 'load_notebook'
+                    ? fileContent
+                    : command === 'load_notebook_results'
+                      ? cacheContent
+                      : undefined,
+            );
+
+            const state = await loadNotebook('cache-2', CONN, client);
+            expect(state.cells[0].result).toEqual(result);
+            expect(state.cells[0].cachedAt).toBe(700);
+
+            // Restoring is not a change: nothing is rewritten.
+            setNotebookState('cache-2', {...state});
+            await vi.advanceTimersByTimeAsync(1500);
+            expect(call).not.toHaveBeenCalledWith('save_notebook_results', expect.anything());
+        });
+
+        it('still loads the notebook when the result cache cannot be read', async () => {
+            const fileContent = JSON.stringify({
+                version: 2,
+                title: 'T',
+                createdAt: '2026-01-01',
+                cells: [{type: 'sql', content: 'SELECT 1'}],
+            });
+            call.mockImplementation(async (command: string) => {
+                if (command === 'load_notebook') return fileContent;
+                if (command === 'load_notebook_results') throw new Error('disk error');
+                return undefined;
+            });
+
+            const state = await loadNotebook('cache-3', CONN, client);
+            expect(state.cells[0].content).toBe('SELECT 1');
+            expect(state.cells[0].result).toBeNull();
+        });
+    });
 });
