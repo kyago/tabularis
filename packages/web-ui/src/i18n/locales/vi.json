@@ -2271,7 +2271,18 @@
           "stopOnError": "Đã bật/tắt dừng khi gặp lỗi",
           "other": "Đã sửa notebook"
         }
-      }
+      },
+      "reportNotRun": "Chưa chạy — dùng Chạy tất cả để tải.",
+      "reportEmpty": "Tất cả ô đều bị loại khỏi báo cáo.",
+      "cachedAt": "Đã lưu đệm · {{time}}",
+      "viewReport": "Báo cáo",
+      "viewEdit": "Chỉnh sửa",
+      "includeInReport": "Đưa vào báo cáo",
+      "excludeFromReport": "Loại khỏi báo cáo",
+      "reportWidth": "Độ rộng trong báo cáo",
+      "reportWidthFull": "Toàn chiều rộng",
+      "reportWidthHalf": "Nửa chiều rộng",
+      "reportWidthThird": "Một phần ba"
     },
     "querySelection": {
       "title": "Chọn truy vấn để chạy",

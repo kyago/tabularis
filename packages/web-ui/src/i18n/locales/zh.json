@@ -2201,7 +2201,18 @@
           "stopOnError": "切换了出错时停止",
           "other": "编辑了笔记本"
         }
-      }
+      },
+      "reportNotRun": "尚未运行 — 使用全部运行加载。",
+      "reportEmpty": "所有单元格均已从报告中排除。",
+      "cachedAt": "缓存 · {{time}}",
+      "viewReport": "报告",
+      "viewEdit": "编辑",
+      "includeInReport": "包含在报告中",
+      "excludeFromReport": "从报告中排除",
+      "reportWidth": "报告宽度",
+      "reportWidthFull": "全宽",
+      "reportWidthHalf": "1/2 宽",
+      "reportWidthThird": "1/3 宽"
     },
     "querySelection": {
       "title": "选择要执行的查询",

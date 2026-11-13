@@ -2259,7 +2259,18 @@
           "stopOnError": "Tina-toggle ang stop on error",
           "other": "In-edit ang notebook"
         }
-      }
+      },
+      "reportNotRun": "Hindi pa napapatakbo — gamitin ang Run All para i-load.",
+      "reportEmpty": "Lahat ng cell ay hindi kasama sa report.",
+      "cachedAt": "Naka-cache · {{time}}",
+      "viewReport": "Report",
+      "viewEdit": "I-edit",
+      "includeInReport": "Isama sa report",
+      "excludeFromReport": "Huwag isama sa report",
+      "reportWidth": "Lapad sa report",
+      "reportWidthFull": "Buong lapad",
+      "reportWidthHalf": "Kalahating lapad",
+      "reportWidthThird": "Isang katlo"
     },
     "querySelection": {
       "title": "Pumili ng Query na Isasakatuparan",

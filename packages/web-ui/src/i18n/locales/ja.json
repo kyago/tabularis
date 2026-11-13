@@ -2239,7 +2239,18 @@
           "stopOnError": "エラー時に停止を切り替え",
           "other": "ノートブックを編集"
         }
-      }
+      },
+      "reportNotRun": "未実行です — すべて実行で読み込んでください。",
+      "reportEmpty": "すべてのセルがレポートから除外されています。",
+      "cachedAt": "キャッシュ · {{time}}",
+      "viewReport": "レポート",
+      "viewEdit": "編集",
+      "includeInReport": "レポートに含める",
+      "excludeFromReport": "レポートから除外",
+      "reportWidth": "レポート幅",
+      "reportWidthFull": "全幅",
+      "reportWidthHalf": "1/2 幅",
+      "reportWidthThird": "1/3 幅"
     },
     "querySelection": {
       "title": "実行するクエリを選択",

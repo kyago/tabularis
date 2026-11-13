@@ -9,7 +9,7 @@ interface MarkdownCellProps {
     onTogglePreview: () => void;
 }
 
-function MarkdownPreview({content}: {content: string}) {
+export function MarkdownPreview({content}: {content: string}) {
     return (
         <div
             className={

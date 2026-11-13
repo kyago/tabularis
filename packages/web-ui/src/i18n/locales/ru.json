@@ -2245,7 +2245,18 @@
           "stopOnError": "Переключён останов при ошибке",
           "other": "Блокнот изменён"
         }
-      }
+      },
+      "reportNotRun": "Ещё не выполнено — нажмите «Выполнить все».",
+      "reportEmpty": "Все ячейки исключены из отчёта.",
+      "cachedAt": "Из кэша · {{time}}",
+      "viewReport": "Отчёт",
+      "viewEdit": "Правка",
+      "includeInReport": "Включить в отчёт",
+      "excludeFromReport": "Исключить из отчёта",
+      "reportWidth": "Ширина в отчёте",
+      "reportWidthFull": "Во всю ширину",
+      "reportWidthHalf": "Половина",
+      "reportWidthThird": "Треть"
     },
     "querySelection": {
       "title": "Выбрать запрос для выполнения",

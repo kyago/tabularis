@@ -2239,7 +2239,18 @@
           "stopOnError": "Parar em caso de erro alternado",
           "other": "Notebook editado"
         }
-      }
+      },
+      "reportNotRun": "Ainda não executada — use Executar tudo para carregar.",
+      "reportEmpty": "Todas as células estão excluídas do relatório.",
+      "cachedAt": "Em cache · {{time}}",
+      "viewReport": "Relatório",
+      "viewEdit": "Editar",
+      "includeInReport": "Incluir no relatório",
+      "excludeFromReport": "Excluir do relatório",
+      "reportWidth": "Largura no relatório",
+      "reportWidthFull": "Largura total",
+      "reportWidthHalf": "Meia largura",
+      "reportWidthThird": "Um terço"
     },
     "querySelection": {
       "title": "Selecionar Consulta para Executar",

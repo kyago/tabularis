@@ -2268,7 +2268,18 @@
           "stopOnError": "Arrêt en cas d'erreur basculé",
           "other": "Notebook modifié"
         }
-      }
+      },
+      "reportNotRun": "Pas encore exécutée — utilisez Tout exécuter pour la charger.",
+      "reportEmpty": "Toutes les cellules sont exclues du rapport.",
+      "cachedAt": "En cache · {{time}}",
+      "viewReport": "Rapport",
+      "viewEdit": "Édition",
+      "includeInReport": "Inclure dans le rapport",
+      "excludeFromReport": "Exclure du rapport",
+      "reportWidth": "Largeur dans le rapport",
+      "reportWidthFull": "Pleine largeur",
+      "reportWidthHalf": "Demi-largeur",
+      "reportWidthThird": "Un tiers"
     },
     "querySelection": {
       "title": "Sélectionner la requête à exécuter",

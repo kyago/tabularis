@@ -2288,7 +2288,18 @@
           "stopOnError": "Stop on error commutato",
           "other": "Notebook modificato"
         }
-      }
+      },
+      "reportNotRun": "Non ancora eseguita — usa Esegui tutto per caricarla.",
+      "reportEmpty": "Tutte le celle sono escluse dal report.",
+      "cachedAt": "In cache · {{time}}",
+      "viewReport": "Report",
+      "viewEdit": "Modifica",
+      "includeInReport": "Includi nel report",
+      "excludeFromReport": "Escludi dal report",
+      "reportWidth": "Larghezza nel report",
+      "reportWidthFull": "Larghezza piena",
+      "reportWidthHalf": "Metà larghezza",
+      "reportWidthThird": "Un terzo"
     },
     "querySelection": {
       "title": "Seleziona la query da eseguire",

@@ -2301,7 +2301,18 @@
           "stopOnError": "Toggled stop on error",
           "other": "Edited notebook"
         }
-      }
+      },
+      "reportNotRun": "Not run yet — use Run All to load this tile.",
+      "reportEmpty": "Every cell is excluded from the report.",
+      "cachedAt": "Cached · {{time}}",
+      "viewReport": "Report",
+      "viewEdit": "Edit",
+      "includeInReport": "Include in report",
+      "excludeFromReport": "Exclude from report",
+      "reportWidth": "Report width",
+      "reportWidthFull": "Full width",
+      "reportWidthHalf": "Half width",
+      "reportWidthThird": "One third"
     },
     "querySelection": {
       "title": "Select Query to Execute",
