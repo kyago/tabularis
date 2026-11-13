@@ -170,7 +170,9 @@ function ChartTypeSelector({config, result, onConfigChange}: ChartTypeSelectorPr
 interface CellChartProps {
     result: QueryResult;
     config: CellChartConfig;
-    onConfigChange: (config: CellChartConfig) => void;
+    /** Omit for a read-only chart (report view): the type/column controls are hidden. */
+    onConfigChange?: (config: CellChartConfig) => void;
+    height?: number;
 }
 
 interface ChartViewProps {
@@ -451,7 +453,7 @@ function ChartView(props: ChartViewProps) {
     }
 }
 
-export function CellChart({result, config, onConfigChange}: CellChartProps) {
+export function CellChart({result, config, onConfigChange, height = 250}: CellChartProps) {
     const {t} = useTranslation();
     const palette = useChartPalette();
     const animate = !usePrefersReducedMotion();
@@ -464,8 +466,10 @@ export function CellChart({result, config, onConfigChange}: CellChartProps) {
 
     return (
         <div className="border-t border-default">
-            <ChartTypeSelector config={config} result={result} onConfigChange={onConfigChange} />
-            <div className="h-[250px] p-2">
+            {onConfigChange && (
+                <ChartTypeSelector config={config} result={result} onConfigChange={onConfigChange} />
+            )}
+            <div style={{height}} className="p-2">
                 {needsTwo ? (
                     <div className="h-full flex items-center justify-center text-xs text-muted">
                         {t('editor.notebook.chartScatterHint')}

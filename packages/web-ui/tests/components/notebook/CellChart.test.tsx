@@ -104,4 +104,24 @@ describe('CellChart', () => {
         );
         expect(container.querySelectorAll('.recharts-line').length).toBe(2);
     });
+    it('hides the chart controls when read-only', () => {
+        const {queryByText} = render(
+            <CellChart
+                result={result}
+                config={{type: 'bar', labelColumn: 'region', valueColumns: ['revenue']}}
+            />,
+        );
+        expect(queryByText('editor.notebook.chartType')).toBeNull();
+    });
+
+    it('shows the chart controls when editable', () => {
+        const {getByText} = render(
+            <CellChart
+                result={result}
+                config={{type: 'bar', labelColumn: 'region', valueColumns: ['revenue']}}
+                onConfigChange={() => {}}
+            />,
+        );
+        expect(getByText('editor.notebook.chartType')).toBeTruthy();
+    });
 });
