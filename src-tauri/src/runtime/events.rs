@@ -6,6 +6,11 @@ pub trait RuntimeEvents: Send + Sync {
     fn emit_to(&self, _session_id: uuid::Uuid, event: &str, payload: Value) -> Result<(), String> {
         self.emit(event, payload)
     }
+
+    /// Web sessions with a live socket subscribed to `event`; empty outside the web transport.
+    fn subscribed_sessions(&self, _event: &str) -> Vec<uuid::Uuid> {
+        Vec::new()
+    }
 }
 
 #[derive(Default)]

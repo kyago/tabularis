@@ -194,3 +194,61 @@ fn lets_every_session_follow_shared_catalog_and_ui_state_changes() {
         Some(AuthorizationLevel::Database)
     );
 }
+
+#[test]
+fn routes_pending_approval_to_listening_sessions_when_no_session_owns_the_connection() {
+    use crate::ai_approval::PendingApproval;
+    use crate::runtime::{paths, secrets, state::ApplicationState, RuntimeContext};
+    use std::sync::Arc;
+
+    let bus = WebEventBus::new(test_config());
+    let listener = Uuid::new_v4();
+    let owner = Uuid::new_v4();
+    let idle = Uuid::new_v4();
+    let mut listening = bus.connect(listener, AuthorizationLevel::LocalAdmin).unwrap();
+    listening
+        .subscribe(&["ai://pending_approval".to_string()], None)
+        .unwrap();
+    let _owning = bus.connect(owner, AuthorizationLevel::LocalAdmin).unwrap();
+    let _idle = bus.connect(idle, AuthorizationLevel::LocalAdmin).unwrap();
+    assert_eq!(bus.subscribed_sessions("ai://pending_approval"), vec![listener]);
+
+    let runtime = RuntimeContext::new(
+        Arc::new(paths::FixedRuntimePaths::system()),
+        Arc::new(bus.clone()),
+        Arc::new(secrets::KeyringRuntimeSecrets),
+    );
+    let state = ApplicationState::default();
+    let pending = PendingApproval {
+        id: "approval".to_string(),
+        created_at: String::new(),
+        session_id: String::new(),
+        connection_id: "conn".to_string(),
+        connection_name: "conn".to_string(),
+        database: None,
+        query: "DELETE FROM t".to_string(),
+        query_kind: "delete".to_string(),
+        client_hint: None,
+        explain_plan: None,
+        explain_error: None,
+    };
+
+    // Nobody has the connection open: fall back to the session listening for approvals.
+    assert_eq!(
+        crate::application::ai::authorized_sessions_for_pending(&runtime, &state, &pending),
+        vec![listener]
+    );
+
+    // A session that has the connection open still takes precedence.
+    state
+        .web_active_connections
+        .lock()
+        .unwrap()
+        .entry(owner)
+        .or_default()
+        .insert("conn".to_string());
+    assert_eq!(
+        crate::application::ai::authorized_sessions_for_pending(&runtime, &state, &pending),
+        vec![owner]
+    );
+}

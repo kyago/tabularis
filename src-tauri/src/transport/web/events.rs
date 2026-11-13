@@ -415,6 +415,21 @@ impl RuntimeEvents for WebEventBus {
     fn emit_to(&self, session_id: Uuid, event: &str, payload: Value) -> Result<(), String> {
         self.publish(Some(session_id), event, payload)
     }
+
+    // Authorization was checked when the connection subscribed.
+    fn subscribed_sessions(&self, event: &str) -> Vec<Uuid> {
+        self.lock_state()
+            .sessions
+            .iter()
+            .filter(|(_, session)| {
+                session
+                    .connections
+                    .values()
+                    .any(|connection| connection.subscriptions.contains(event))
+            })
+            .map(|(id, _)| *id)
+            .collect()
+    }
 }
 
 impl EventConnection {

@@ -300,11 +300,14 @@ pub async fn list_pending_approvals(
     };
     Ok(pending
         .into_iter()
-        .filter(|approval| claim_pending_for_session(state, session_id, approval))
+        .filter(|approval| claim_pending_for_session(runtime, state, session_id, approval))
         .collect())
 }
 
+/// Sessions that have the approval's connection open; when none do, every
+/// session listening for approvals, so the request is never left unseen.
 pub fn authorized_sessions_for_pending(
+    runtime: &RuntimeContext,
     state: &ApplicationState,
     pending: &PendingApproval,
 ) -> Vec<Uuid> {
@@ -319,6 +322,11 @@ pub fn authorized_sessions_for_pending(
                 .then_some(*session_id)
         })
         .collect::<Vec<_>>();
+    if sessions.is_empty() {
+        sessions = runtime
+            .events
+            .subscribed_sessions(crate::ai_approval_watcher::PENDING_APPROVAL_EVENT);
+    }
     sessions.sort_unstable();
     sessions
 }
@@ -334,11 +342,12 @@ pub fn release_pending_owner(state: &ApplicationState, approval_id: &str, sessio
 }
 
 pub(crate) fn claim_pending_for_session(
+    runtime: &RuntimeContext,
     state: &ApplicationState,
     session_id: Uuid,
     pending: &PendingApproval,
 ) -> bool {
-    let authorized_sessions = authorized_sessions_for_pending(state, pending);
+    let authorized_sessions = authorized_sessions_for_pending(runtime, state, pending);
     if !authorized_sessions.contains(&session_id) {
         return false;
     }
@@ -383,7 +392,7 @@ async fn decide_pending_approval(
     .ok_or_else(|| "The pending AI approval no longer exists".to_string())?;
 
     if let Some(session_id) = web_session_id {
-        if !claim_pending_for_session(state, session_id, &pending) {
+        if !claim_pending_for_session(runtime, state, session_id, &pending) {
             return Err("The AI approval belongs to another authorized session".to_string());
         }
     }

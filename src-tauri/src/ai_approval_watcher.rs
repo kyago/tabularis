@@ -47,7 +47,7 @@ pub fn spawn_headless(
 
             for approval in pending {
                 let authorized_sessions =
-                    crate::application::ai::authorized_sessions_for_pending(&state, &approval);
+                    crate::application::ai::authorized_sessions_for_pending(&runtime, &state, &approval);
                 if delivered
                     .get(&approval.id)
                     .is_some_and(|owner| authorized_sessions.contains(owner))
@@ -70,7 +70,7 @@ pub fn spawn_headless(
                 };
                 for session_id in authorized_sessions {
                     if !crate::application::ai::claim_pending_for_session(
-                        &state, session_id, &approval,
+                        &runtime, &state, session_id, &approval,
                     ) {
                         continue;
                     }
