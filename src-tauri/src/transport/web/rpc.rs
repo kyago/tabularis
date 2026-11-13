@@ -304,6 +304,8 @@ enum NotebookRpcCommand {
     Delete,
     Rename,
     List,
+    SaveResults,
+    LoadResults,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -2391,6 +2393,8 @@ impl NotebookRpcCommand {
             "delete_notebook" => Self::Delete,
             "rename_notebook" => Self::Rename,
             "list_notebooks" => Self::List,
+            "save_notebook_results" => Self::SaveResults,
+            "load_notebook_results" => Self::LoadResults,
             _ => return None,
         })
     }
@@ -3005,6 +3009,21 @@ fn decode_notebook_command(
             let request: ConnectionIdRequest = decode_payload(body)?;
             NotebookCommand::List {
                 connection_id: request.connection_id,
+            }
+        }
+        NotebookRpcCommand::SaveResults => {
+            let request: NotebookContentRequest = decode_payload(body)?;
+            NotebookCommand::SaveResults {
+                connection_id: request.connection_id,
+                notebook_id: request.notebook_id,
+                content: request.content,
+            }
+        }
+        NotebookRpcCommand::LoadResults => {
+            let request: NotebookTargetRequest = decode_payload(body)?;
+            NotebookCommand::LoadResults {
+                connection_id: request.connection_id,
+                notebook_id: request.notebook_id,
             }
         }
     })

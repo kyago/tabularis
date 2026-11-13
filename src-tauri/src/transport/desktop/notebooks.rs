@@ -101,3 +101,37 @@ pub async fn list_notebooks(
     )?;
     serde_json::from_value(value).map_err(|error| error.to_string())
 }
+
+#[tauri::command]
+pub async fn save_notebook_results(
+    app: AppHandle,
+    connection_id: String,
+    notebook_id: String,
+    content: String,
+) -> Result<(), String> {
+    execute(
+        app.state::<RuntimeContext>().paths.config_dir(),
+        NotebookCommand::SaveResults {
+            connection_id,
+            notebook_id,
+            content,
+        },
+    )?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn load_notebook_results(
+    app: AppHandle,
+    connection_id: String,
+    notebook_id: String,
+) -> Result<Option<String>, String> {
+    let value = execute(
+        app.state::<RuntimeContext>().paths.config_dir(),
+        NotebookCommand::LoadResults {
+            connection_id,
+            notebook_id,
+        },
+    )?;
+    serde_json::from_value(value).map_err(|error| error.to_string())
+}

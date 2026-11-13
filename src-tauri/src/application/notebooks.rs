@@ -10,6 +10,8 @@ use std::time::SystemTime;
 
 const NOTEBOOKS_DIR: &str = "notebooks";
 const NOTEBOOK_EXTENSION: &str = ".tabularis-notebook";
+/// Last SQL-cell results, kept beside the notebook so exports never carry query data.
+const RESULTS_EXTENSION: &str = ".results.json";
 
 static NOTEBOOK_STORAGE_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
@@ -54,6 +56,15 @@ pub enum NotebookCommand {
     List {
         connection_id: String,
     },
+    SaveResults {
+        connection_id: String,
+        notebook_id: String,
+        content: String,
+    },
+    LoadResults {
+        connection_id: String,
+        notebook_id: String,
+    },
 }
 
 pub fn execute(config_dir: &Path, command: NotebookCommand) -> Result<Value, String> {
@@ -96,6 +107,18 @@ pub fn execute(config_dir: &Path, command: NotebookCommand) -> Result<Value, Str
             Ok(Value::Null)
         }
         NotebookCommand::List { connection_id } => json(list_in(&root, &connection_id)?),
+        NotebookCommand::SaveResults {
+            connection_id,
+            notebook_id,
+            content,
+        } => {
+            write_results_in(&root, &connection_id, &notebook_id, &content)?;
+            Ok(Value::Null)
+        }
+        NotebookCommand::LoadResults {
+            connection_id,
+            notebook_id,
+        } => json(load_results_in(&root, &connection_id, &notebook_id)?),
     }
 }
 
@@ -115,6 +138,37 @@ fn notebook_path(root: &Path, connection_id: &str, notebook_id: &str) -> Result<
     validate_id(notebook_id)?;
     let dir = connection_dir(root, connection_id)?;
     Ok(dir.join(format!("{notebook_id}{NOTEBOOK_EXTENSION}")))
+}
+
+fn results_path(root: &Path, connection_id: &str, notebook_id: &str) -> Result<PathBuf, String> {
+    validate_id(notebook_id)?;
+    let dir = connection_dir(root, connection_id)?;
+    Ok(dir.join(format!("{notebook_id}{RESULTS_EXTENSION}")))
+}
+
+fn write_results_in(
+    root: &Path,
+    connection_id: &str,
+    notebook_id: &str,
+    content: &str,
+) -> Result<(), String> {
+    let path = results_path(root, connection_id, notebook_id)?;
+    atomic_write(&path, content.as_bytes())
+        .map_err(|error| format!("Failed to write notebook results: {error}"))
+}
+
+fn load_results_in(
+    root: &Path,
+    connection_id: &str,
+    notebook_id: &str,
+) -> Result<Option<String>, String> {
+    let path = results_path(root, connection_id, notebook_id)?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    fs::read_to_string(&path)
+        .map(Some)
+        .map_err(|error| format!("Failed to read notebook results: {error}"))
 }
 
 fn legacy_notebook_path(root: &Path, notebook_id: &str) -> Result<PathBuf, String> {
@@ -163,6 +217,10 @@ fn delete_in(root: &Path, connection_id: &str, notebook_id: &str) -> Result<(), 
     let path = notebook_path(root, connection_id, notebook_id)?;
     if path.exists() {
         fs::remove_file(&path).map_err(|error| format!("Failed to delete notebook: {error}"))?;
+    }
+    let results = results_path(root, connection_id, notebook_id)?;
+    if results.exists() {
+        let _ = fs::remove_file(&results);
     }
     if let Ok(legacy) = legacy_notebook_path(root, notebook_id) {
         if legacy.exists() {

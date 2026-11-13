@@ -666,6 +666,8 @@ pub fn run(args: crate::cli::Args, log_buffer: crate::logger::SharedLogBuffer) {
             notebooks::delete_notebook,
             notebooks::rename_notebook,
             notebooks::list_notebooks,
+            notebooks::save_notebook_results,
+            notebooks::load_notebook_results,
             // Plugin Registry
             plugins::commands::fetch_plugin_registry,
             plugins::commands::install_plugin,

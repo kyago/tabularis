@@ -1047,6 +1047,8 @@ fn registers_notebook_commands_with_database_authorization() {
         "delete_notebook",
         "rename_notebook",
         "list_notebooks",
+        "save_notebook_results",
+        "load_notebook_results",
     ] {
         let command = RpcCommand::parse(name).unwrap_or_else(|| panic!("missing {name}"));
         assert_eq!(
@@ -1850,6 +1852,21 @@ async fn routes_notebook_commands_through_the_shared_application_api() {
         (
             "list_notebooks",
             serde_json::json!({"connectionId": "connection-1"}),
+        ),
+        (
+            "save_notebook_results",
+            serde_json::json!({
+                "connectionId": "connection-1",
+                "notebookId": "notebook-1",
+                "content": "{}"
+            }),
+        ),
+        (
+            "load_notebook_results",
+            serde_json::json!({
+                "connectionId": "connection-1",
+                "notebookId": "notebook-1"
+            }),
         ),
     ];
 

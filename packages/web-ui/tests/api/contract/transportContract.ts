@@ -1003,6 +1003,14 @@ async function handleRequest(
             request: {...notebookTarget, title: 'Revenue 2026'},
             response: null,
         },
+        save_notebook_results: {
+            request: {...notebookTarget, content: '{"version":1,"cells":{}}'},
+            response: null,
+        },
+        load_notebook_results: {
+            request: notebookTarget,
+            response: '{"version":1,"cells":{}}',
+        },
         list_notebooks: {
             request: {connectionId: 'notebook-fixture'},
             response: [

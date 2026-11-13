@@ -182,3 +182,77 @@ fn command_service_scopes_storage_to_config_directory() {
         .join("nb_shared.tabularis-notebook")
         .exists());
 }
+
+#[test]
+fn save_and_load_results_round_trip() {
+    let temporary = TempDir::new().unwrap();
+    let root = temporary.path();
+
+    write_results_in(root, CONNECTION_ID, "nb_a", r#"{"version":1,"cells":{}}"#).unwrap();
+    assert!(root
+        .join(CONNECTION_ID)
+        .join("nb_a.results.json")
+        .exists());
+    let loaded = load_results_in(root, CONNECTION_ID, "nb_a").unwrap();
+    assert_eq!(loaded.as_deref(), Some(r#"{"version":1,"cells":{}}"#));
+}
+
+#[test]
+fn load_results_missing_returns_none() {
+    let temporary = TempDir::new().unwrap();
+    assert!(load_results_in(temporary.path(), CONNECTION_ID, "nope")
+        .unwrap()
+        .is_none());
+}
+
+#[test]
+fn delete_removes_results_file() {
+    let temporary = TempDir::new().unwrap();
+    let root = temporary.path();
+    write_in(root, CONNECTION_ID, "nb_a", &sample("Hello")).unwrap();
+    write_results_in(root, CONNECTION_ID, "nb_a", "{}").unwrap();
+
+    delete_in(root, CONNECTION_ID, "nb_a").unwrap();
+    assert!(!root.join(CONNECTION_ID).join("nb_a.results.json").exists());
+}
+
+#[test]
+fn list_ignores_results_file() {
+    let temporary = TempDir::new().unwrap();
+    let root = temporary.path();
+    write_in(root, CONNECTION_ID, "nb_a", &sample("Hello")).unwrap();
+    write_results_in(root, CONNECTION_ID, "nb_a", "{}").unwrap();
+
+    assert_eq!(list_in(root, CONNECTION_ID).unwrap().len(), 1);
+}
+
+#[test]
+fn results_reject_invalid_ids() {
+    let temporary = TempDir::new().unwrap();
+    let root = temporary.path();
+    assert!(write_results_in(root, CONNECTION_ID, "../x", "{}").is_err());
+    assert!(load_results_in(root, "../conn", "nb_a").is_err());
+}
+
+#[test]
+fn command_service_round_trips_results() {
+    let temporary = TempDir::new().unwrap();
+    execute(
+        temporary.path(),
+        NotebookCommand::SaveResults {
+            connection_id: CONNECTION_ID.into(),
+            notebook_id: "nb_a".into(),
+            content: "{}".into(),
+        },
+    )
+    .unwrap();
+    let value = execute(
+        temporary.path(),
+        NotebookCommand::LoadResults {
+            connection_id: CONNECTION_ID.into(),
+            notebook_id: "nb_a".into(),
+        },
+    )
+    .unwrap();
+    assert_eq!(value, serde_json::json!("{}"));
+}

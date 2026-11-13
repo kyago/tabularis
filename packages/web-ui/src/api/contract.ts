@@ -1150,6 +1150,8 @@ export interface CommandMap {
     delete_notebook: CommandDefinition<NotebookTargetRequest, void, 'database'>;
     rename_notebook: CommandDefinition<NotebookTargetRequest & {title: string}, void, 'database'>;
     list_notebooks: CommandDefinition<ConnectionIdRequest, NotebookMetadata[], 'database'>;
+    save_notebook_results: CommandDefinition<NotebookContentRequest, void, 'database'>;
+    load_notebook_results: CommandDefinition<NotebookTargetRequest, string | null, 'database'>;
 
     delete_record: CommandDefinition<RecordIdentityRequest, number, 'database'>;
     update_record: CommandDefinition<
