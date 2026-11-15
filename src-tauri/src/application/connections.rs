@@ -757,6 +757,12 @@ pub(crate) fn bind_sql_builder_secrets(runtime: &RuntimeContext, connection: &mu
 }
 
 fn delete_plugin_secrets(runtime: &RuntimeContext, connection: &SavedConnection) {
+    let bundle =
+        crate::plugins::extension_policy::secret_key(&connection.params.driver, &connection.id);
+    if let Err(error) = runtime.secrets.delete(&bundle) {
+        log::warn!("Failed to remove plugin service credentials: {error}");
+    }
+
     for key in &connection.plugin_secret_keys {
         let account = plugin_secret_account(&connection.id, &connection.params.driver, key);
         if let Err(error) = runtime.secrets.delete(&account) {
@@ -818,6 +824,65 @@ fn restore_secrets_for_connect(
     Ok(())
 }
 
+/// Provider imports must fail closed when credential storage is unavailable.
+pub(super) fn save_provider_connection(
+    runtime: &RuntimeContext,
+    state: &Arc<ApplicationState>,
+    name: String,
+    mut params: ConnectionParams,
+    service_secrets: Value,
+) -> Result<SavedConnection, String> {
+    let mut file = load_file(runtime)?;
+    let id = Uuid::new_v4().to_string();
+    let mut writes = SecretWrites::default();
+    let result = (|| {
+        params.connection_id = None;
+        params.save_in_keychain = Some(true);
+        let uri = params.connection_uri.take();
+        params.connection_uri_in_keychain = uri.as_ref().map(|_| true);
+        for (suffix, value) in [
+            (DB_SECRET_SUFFIX, params.password.take()),
+            (SSH_SECRET_SUFFIX, params.ssh_password.take()),
+            (SSH_PASSPHRASE_SUFFIX, params.ssh_key_passphrase.take()),
+            (CONNECTION_URI_SUFFIX, uri),
+        ] {
+            if let Some(value) = value.filter(|value| !value.is_empty()) {
+                writes.set(runtime, secret_account(&id, suffix), &value)?;
+            }
+        }
+        if service_secrets
+            .as_object()
+            .is_some_and(|value| !value.is_empty())
+        {
+            writes.set(
+                runtime,
+                crate::plugins::extension_policy::secret_key(&params.driver, &id),
+                &service_secrets.to_string(),
+            )?;
+        }
+        let connection = SavedConnection {
+            id,
+            name,
+            params,
+            plugin_secret_keys: Vec::new(),
+            group_id: None,
+            sort_order: None,
+            detect_json_in_text_columns: None,
+            appearance: None,
+            tag_ids: None,
+            environment: None,
+            managed: false,
+        };
+        file.connections.push(connection.clone());
+        save_file(runtime, state, &file)?;
+        Ok(redact_connection(connection))
+    })();
+    if result.is_err() {
+        writes.rollback(runtime);
+    }
+    result
+}
+
 fn save_connection(
     runtime: &RuntimeContext,
     state: &Arc<ApplicationState>,
@@ -853,6 +918,7 @@ fn save_connection(
             appearance: None,
             tag_ids: None,
             environment,
+            managed: false,
         };
         file.connections.push(connection.clone());
         save_file(runtime, state, &file)?;
@@ -997,6 +1063,26 @@ fn update_connection(
     let mut writes = SecretWrites::default();
     let result = (|| {
         params.connection_id = None;
+        let old_target = serde_json::json!([
+            existing.params.driver,
+            existing.params.host,
+            existing.params.port,
+            existing.params.username,
+            existing.params.database
+        ]);
+        let new_target = serde_json::json!([
+            params.driver,
+            params.host,
+            params.port,
+            params.username,
+            params.database
+        ]);
+        if old_target != new_target {
+            writes.delete(
+                runtime,
+                crate::plugins::extension_policy::secret_key(&existing.params.driver, &id),
+            )?;
+        }
         let plugin_secret_keys = persist_plugin_secrets(
             runtime,
             &id,
@@ -1017,6 +1103,7 @@ fn update_connection(
             appearance: existing.appearance,
             tag_ids: existing.tag_ids,
             environment,
+            managed: existing.managed,
         };
         file.connections[index] = connection.clone();
         save_file(runtime, state, &file)?;
@@ -1166,6 +1253,7 @@ fn duplicate_connection(
             appearance,
             tag_ids: original.tag_ids,
             environment: validate_environment(original.environment).unwrap_or(None),
+            managed: false,
         };
         file.connections.push(duplicate.clone());
         save_file(runtime, state, &file)?;
@@ -1642,7 +1730,7 @@ async fn test_connection(
             progress_id.as_deref(),
             step,
             "ok",
-            resolved.port.map(|port| format!("127.0.0.1:{port}")),
+            tunnel_endpoint_detail(&resolved),
         );
     }
 
@@ -1714,6 +1802,15 @@ async fn test_connection(
         None,
     );
     Ok("Connection successful!".to_string())
+}
+
+/// Local endpoint the test log reports once a tunnel is up. A SOCKS5 tunnel
+/// leaves `host`/`port` on the database, so it reports the proxy listener.
+fn tunnel_endpoint_detail(resolved: &ConnectionParams) -> Option<String> {
+    match (&resolved.socks5_proxy_host, resolved.socks5_proxy_port) {
+        (Some(host), Some(port)) => Some(format!("SOCKS5 {host}:{port}")),
+        _ => resolved.port.map(|port| format!("127.0.0.1:{port}")),
+    }
 }
 
 /// `host:port` for the connection test log. A host that is a URL

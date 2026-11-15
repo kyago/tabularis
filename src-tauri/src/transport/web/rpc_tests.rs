@@ -7,6 +7,34 @@ use axum::http::HeaderValue;
 use uuid::Uuid;
 
 #[test]
+fn database_sql_import_preserves_creation_and_rejects_browser_server_paths() {
+    let command=decode_database_transfer_command(DatabaseTransferRpcCommand::Import,br#"{"connectionId":"source","uploadToken":"upload","database":"/server/new.fdb","createDatabase":true}"#).unwrap();
+    assert!(
+        matches!(command,DatabaseTransferCommand::Import{create_database:true,database:Some(database),..} if database=="/server/new.fdb")
+    );
+    let ordinary = decode_database_transfer_command(
+        DatabaseTransferRpcCommand::Import,
+        br#"{"connectionId":"source","uploadToken":"upload"}"#,
+    )
+    .unwrap();
+    assert!(matches!(
+        ordinary,
+        DatabaseTransferCommand::Import {
+            create_database: false,
+            ..
+        }
+    ));
+    assert!(decode_database_transfer_command(
+        DatabaseTransferRpcCommand::Import,
+        br#"{"connectionId":"source","uploadToken":"upload","filePath":"/etc/passwd"}"#
+    )
+    .is_err());
+    assert!(
+        matches!(decode_database_transfer_command(DatabaseTransferRpcCommand::Capabilities,br#"{"connectionId":"source"}"#).unwrap(),DatabaseTransferCommand::Capabilities{connection_id} if connection_id=="source")
+    );
+}
+
+#[test]
 fn routine_debug_web_command_preserves_native_identity_and_rejects_extra_fields() {
     let body = br#"{"connectionId":"oracle","version":1,"command":{"action":"step","session_id":"session","mode":"over"}}"#;
     let command =
@@ -596,6 +624,10 @@ fn declares_authorization_for_each_registered_command() {
         DatabaseTransferRpcCommand::CancelDump,
         DatabaseTransferRpcCommand::Import,
         DatabaseTransferRpcCommand::CancelImport,
+        DatabaseTransferRpcCommand::GetTableTransferCapabilities,
+        DatabaseTransferRpcCommand::PlanTableTransfer,
+        DatabaseTransferRpcCommand::RunTableTransfer,
+        DatabaseTransferRpcCommand::CancelTableTransfer,
     ] {
         assert_eq!(
             RpcCommand::DatabaseTransfer(command)
@@ -698,6 +730,7 @@ fn registers_ai_commands_with_explicit_authorization() {
         "check_ai_key",
         "check_ai_key_status",
         "get_ai_models",
+        "get_ai_providers",
         "generate_ai_query",
         "explain_ai_query",
         "analyze_ai_explain_plan",
@@ -722,6 +755,11 @@ fn registers_ai_commands_with_explicit_authorization() {
 
     let schema_context =
         RpcCommand::parse("get_ai_schema_context").expect("missing get_ai_schema_context");
+    let migration = RpcCommand::parse("migrate_ai_providers").expect("missing AI migration");
+    assert_eq!(
+        migration.metadata().authorization,
+        AuthorizationLevel::LocalAdmin
+    );
     assert_eq!(
         schema_context.metadata().authorization,
         AuthorizationLevel::Database
@@ -1213,6 +1251,10 @@ async fn routes_database_transfer_jobs_through_the_shared_application_api() {
     let session_id = Some(Uuid::new_v4());
     let commands = [
         (
+            "get_database_sql_capabilities",
+            serde_json::json!({"connectionId":"connection-1"}),
+        ),
+        (
             "dump_database",
             serde_json::json!({
                 "connectionId": "connection-1",
@@ -1235,6 +1277,29 @@ async fn routes_database_transfer_jobs_through_the_shared_application_api() {
         (
             "cancel_import",
             serde_json::json!({"connectionId": "connection-1"}),
+        ),
+        ("get_table_transfer_capabilities", serde_json::json!({})),
+        (
+            "plan_table_transfer",
+            serde_json::json!({"request": {
+                "sourceConnectionId": "connection-1",
+                "targetConnectionId": "connection-2",
+                "tables": [{"sourceTable": "customers", "targetTable": "customers"}]
+            }}),
+        ),
+        (
+            "run_table_transfer",
+            serde_json::json!({"request": {
+                "sourceConnectionId": "connection-1",
+                "targetConnectionId": "connection-2",
+                "tables": [{"sourceTable": "customers", "targetTable": "customers"}],
+                "conflict": "skip",
+                "transferId": "transfer-1"
+            }}),
+        ),
+        (
+            "cancel_table_transfer",
+            serde_json::json!({"transferId": "transfer-1"}),
         ),
         (
             "read_table_sql_header",
@@ -1564,6 +1629,13 @@ async fn routes_query_execution_commands_through_the_shared_application_api() {
             "get_server_now",
             serde_json::json!({"connectionId": "connection-1"}),
         ),
+        (
+            "preview_dml_changes",
+            serde_json::json!({
+                "connectionId": "connection-1",
+                "sql": "UPDATE orders SET status = 'paid' WHERE id = 1"
+            }),
+        ),
     ];
 
     for (command, payload) in commands {
@@ -1613,11 +1685,17 @@ async fn routes_ai_commands_through_the_shared_application_api() {
         ),
         ("get_ai_models", serde_json::json!({"forceRefresh": false})),
         ("generate_ai_query", generate),
-        ("complete_ai_inline", serde_json::json!({"req": {
-            "requestId": "inline-contract", "provider": "ollama", "model": "local",
-            "prefix": "SELECT ", "suffix": "", "schema": "", "dialect": "postgres"
-        }})),
-        ("cancel_ai_inline", serde_json::json!({"requestId": "inline-contract"})),
+        (
+            "complete_ai_inline",
+            serde_json::json!({"req": {
+                "requestId": "inline-contract", "provider": "ollama", "model": "local",
+                "prefix": "SELECT ", "suffix": "", "schema": "", "dialect": "postgres"
+            }}),
+        ),
+        (
+            "cancel_ai_inline",
+            serde_json::json!({"requestId": "inline-contract"}),
+        ),
         ("explain_ai_query", explain.clone()),
         ("analyze_ai_explain_plan", explain.clone()),
         ("analyze_ai_crash_report", explain),
@@ -2903,6 +2981,14 @@ async fn connection_policy_blocks_file_drivers_in_inline_and_saved_requests() {
                 serde_json::json!({"connectionId":"saved-db", "uploadToken":"upload"}),
             ),
             (
+                "plan_table_transfer",
+                serde_json::json!({"request":{"sourceConnectionId":"remote-db", "targetConnectionId":"saved-db", "tables":[]}}),
+            ),
+            (
+                "run_table_transfer",
+                serde_json::json!({"request":{"sourceConnectionId":"saved-db", "targetConnectionId":"remote-db", "tables":[], "transferId":"t"}}),
+            ),
+            (
                 "get_available_databases",
                 serde_json::json!({"connectionId":"saved-db"}),
             ),
@@ -3181,6 +3267,134 @@ async fn database_backup_rpc_requires_local_admin_and_uses_the_shared_applicatio
             assert_eq!(response.status(), expected, "{command}");
         }
     }
+}
+
+#[tokio::test]
+async fn plugin_extensions_enforce_web_authorization_and_reject_credential_injection() {
+    let dispatcher = RpcDispatcher::new(Arc::new(FixtureApplication::new(Duration::ZERO)));
+    let commands = [
+        (
+            "call_plugin_extension",
+            serde_json::json!({"pluginId":"test-plugin","connectionId":"first","method":"service_status","args":{}}),
+        ),
+        (
+            "set_plugin_secrets",
+            serde_json::json!({"pluginId":"test-plugin","connectionId":"first","secrets":{"TOKEN":"private"}}),
+        ),
+        (
+            "delete_plugin_secrets",
+            serde_json::json!({"pluginId":"test-plugin","connectionId":"first"}),
+        ),
+    ];
+    for (name, payload) in commands {
+        for authorization in [
+            AuthorizationLevel::Session,
+            AuthorizationLevel::Database,
+            AuthorizationLevel::Sensitive,
+        ] {
+            assert_eq!(
+                dispatch_json(
+                    &dispatcher,
+                    name,
+                    payload.clone(),
+                    Some(Uuid::new_v4()),
+                    authorization
+                )
+                .await
+                .status(),
+                StatusCode::FORBIDDEN
+            );
+        }
+        assert_eq!(
+            dispatch_json(
+                &dispatcher,
+                name,
+                payload.clone(),
+                Some(Uuid::new_v4()),
+                AuthorizationLevel::LocalAdmin
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+        let mut injected = payload;
+        injected["params"] = serde_json::json!({"host":"attacker.example","password":"secret"});
+        assert_eq!(
+            dispatch_json(
+                &dispatcher,
+                name,
+                injected,
+                Some(Uuid::new_v4()),
+                AuthorizationLevel::LocalAdmin
+            )
+            .await
+            .status(),
+            StatusCode::BAD_REQUEST
+        );
+    }
+    let fields = serde_json::json!({"pluginId":"test-plugin","connectionId":"first"});
+    assert_eq!(
+        dispatch_json(
+            &dispatcher,
+            "get_plugin_secret_fields",
+            fields.clone(),
+            Some(Uuid::new_v4()),
+            AuthorizationLevel::Session
+        )
+        .await
+        .status(),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        dispatch_json(
+            &dispatcher,
+            "get_plugin_secret_fields",
+            fields,
+            Some(Uuid::new_v4()),
+            AuthorizationLevel::Database
+        )
+        .await
+        .status(),
+        StatusCode::OK
+    );
+    assert!(RpcCommand::parse("get_plugin_secrets").is_none());
+}
+
+#[tokio::test]
+async fn provider_accounts_are_admin_only_and_reject_injected_connection_parameters() {
+    let dispatcher = RpcDispatcher::new(Arc::new(FixtureApplication::new(Duration::ZERO)));
+    for operation in ["fields", "disconnect", "connect", "call", "import"] {
+        let payload = serde_json::json!({"pluginId":"neon","operation":operation});
+        for level in [
+            AuthorizationLevel::Session,
+            AuthorizationLevel::Database,
+            AuthorizationLevel::Sensitive,
+        ] {
+            assert_eq!(
+                dispatch_json(
+                    &dispatcher,
+                    "plugin_account",
+                    payload.clone(),
+                    Some(Uuid::new_v4()),
+                    level
+                )
+                .await
+                .status(),
+                StatusCode::FORBIDDEN
+            );
+        }
+    }
+    let invalid = dispatch_json(&dispatcher,"plugin_account",serde_json::json!({"pluginId":"neon","operation":"import","args":{},"params":{"password":"injected"}}),Some(Uuid::new_v4()),AuthorizationLevel::LocalAdmin).await;
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+    let valid = dispatch_json(
+        &dispatcher,
+        "plugin_account",
+        serde_json::json!({"pluginId":"neon","operation":"fields"}),
+        Some(Uuid::new_v4()),
+        AuthorizationLevel::LocalAdmin,
+    )
+    .await;
+    assert_eq!(valid.status(), StatusCode::OK);
 }
 
 #[tokio::test]
