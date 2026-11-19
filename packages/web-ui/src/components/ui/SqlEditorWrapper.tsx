@@ -485,18 +485,24 @@ const SqlEditorInternal = ({
             }
         }
 
-        // Bind Ctrl+Enter to Run — use ref so the closure never goes stale
-        editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
-            onRunRef.current();
+        // Bind Ctrl+Enter to Run — use ref so the closure never goes stale.
+        // addAction, not addCommand: addCommand keybindings are shared by every
+        // Monaco editor on the page, so the last mounted one (a hidden notebook
+        // cell) would run instead of the focused editor.
+        editor.addAction({
+            id: 'tabularis.run',
+            label: 'Run',
+            keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
+            run: () => onRunRef.current(),
         });
 
         // Bind Ctrl+Shift+Enter to Run All
-        editor.addCommand(
-            monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Enter,
-            () => {
-                onRunAllRef.current?.();
-            },
-        );
+        editor.addAction({
+            id: 'tabularis.runAll',
+            label: 'Run All',
+            keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Enter],
+            run: () => onRunAllRef.current?.(),
+        });
 
         // Format SQL action (Shift+Alt+F) — uses the existing formatSql utility
         editor.addAction({
@@ -684,6 +690,15 @@ const SqlEditorInternal = ({
                 e.preventDefault();
                 e.stopPropagation();
                 editor.trigger('keyboard', 'editor.action.triggerSuggest', {});
+                return;
+            }
+
+            if (matchesShortcutRef.current(e.browserEvent, 'trigger_ai_inline')) {
+                e.preventDefault();
+                e.stopPropagation();
+                // An open suggestion list suppresses inline completions; close it first.
+                editor.trigger('keyboard', 'hideSuggestWidget', {});
+                editor.trigger('keyboard', 'editor.action.inlineSuggest.trigger', {});
                 return;
             }
 

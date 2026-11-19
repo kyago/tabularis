@@ -717,6 +717,11 @@ export function AiTab() {
                                                                 updateSetting('aiModel', val)
                                                             }
                                                             options={currentModels}
+                                                            customOption={(model) =>
+                                                                t('settings.ai.useCustomModel', {
+                                                                    model,
+                                                                })
+                                                            }
                                                             placeholder={t(
                                                                 'settings.ai.modelPlaceholder',
                                                             )}

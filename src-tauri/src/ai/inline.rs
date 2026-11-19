@@ -25,7 +25,9 @@ const SYSTEM_PROMPT: &str = "Complete SQL at the cursor between prefix and suffi
     Return only a JSON object with one string field named completion. \
     That string must be a short SQL continuation (at most 2000 characters), preserving necessary \
     leading/trailing whitespace inside the JSON string. Do not repeat prefix or suffix, add \
-    markdown, explanations or commands. Return an empty completion when uncertain. \
+    markdown, explanations or commands. Always propose the most likely continuation: when \
+    column names are not given, infer plausible ones from the SQL and the listed tables. \
+    Return an empty completion only when the statement is already complete. \
     Use the supplied SQL dialect. You only suggest text; never execute SQL or request data.";
 
 type Key = (std::path::PathBuf, Option<Uuid>, String);

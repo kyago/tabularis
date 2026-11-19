@@ -1,7 +1,9 @@
 use super::{read_manifest, recipe, AssistantManifest, Authentication, HttpRequest};
+use crate::proxy::HttpProxyPolicy;
 use crate::{credential_cache::CredentialCache, runtime::RuntimeContext};
 use reqwest::Client;
 use serde_json::{json, Value};
+use std::sync::Mutex;
 use std::time::Duration;
 
 pub async fn call(
@@ -40,27 +42,12 @@ pub async fn call(
         None
     };
     let variables = json!({"settings":settings,"model":request["model"],"prompt":request["prompt"],"system_prompt":request["system_prompt"]});
-    let mut builder = Client::builder()
-        .timeout(Duration::from_secs(30))
-        .redirect(reqwest::redirect::Policy::none());
     let policy = if manifest.ai_assistant.direct {
         crate::proxy::HttpProxyPolicy::Disabled
     } else {
         crate::proxy::resolve_http_policy(crate::proxy::SCOPE_AI, Some(provider))?
     };
-    match policy {
-        crate::proxy::HttpProxyPolicy::System => {}
-        crate::proxy::HttpProxyPolicy::Disabled => builder = builder.no_proxy(),
-        crate::proxy::HttpProxyPolicy::Custom(endpoint) => {
-            builder = builder.no_proxy().proxy(
-                reqwest::Proxy::all(crate::proxy::endpoint_to_proxy_url(&endpoint)?)
-                    .map_err(|_| "Invalid AI assistant proxy")?,
-            )
-        }
-    }
-    let client = builder
-        .build()
-        .map_err(|_| "Could not build AI assistant HTTP client")?;
+    let client = client_for(policy)?;
     let operation = execute(&client, &manifest, &variables, key.as_deref(), method);
     match crate::plugins::call_timeout::for_plugin(provider) {
         Some(timeout) => tokio::time::timeout(timeout, operation)
@@ -68,6 +55,36 @@ pub async fn call(
             .map_err(|_| "AI assistant request timed out".to_string())?,
         None => operation.await,
     }
+}
+
+/// The last client, kept so requests reuse the provider connection instead of
+/// paying a new TLS handshake each time.
+// shortcut: a changed system proxy or proxy password needs an app restart, rebuild on change if that matters.
+static CLIENT: Mutex<Option<(HttpProxyPolicy, Client)>> = Mutex::new(None);
+
+fn client_for(policy: HttpProxyPolicy) -> Result<Client, String> {
+    let mut cached = CLIENT.lock().map_err(|e| e.to_string())?;
+    if let Some((_, client)) = cached.as_ref().filter(|(cached, _)| *cached == policy) {
+        return Ok(client.clone());
+    }
+    let mut builder = Client::builder()
+        .timeout(Duration::from_secs(30))
+        .redirect(reqwest::redirect::Policy::none());
+    match &policy {
+        HttpProxyPolicy::System => {}
+        HttpProxyPolicy::Disabled => builder = builder.no_proxy(),
+        HttpProxyPolicy::Custom(endpoint) => {
+            builder = builder.no_proxy().proxy(
+                reqwest::Proxy::all(crate::proxy::endpoint_to_proxy_url(endpoint)?)
+                    .map_err(|_| "Invalid AI assistant proxy")?,
+            )
+        }
+    }
+    let client = builder
+        .build()
+        .map_err(|_| "Could not build AI assistant HTTP client")?;
+    *cached = Some((policy, client.clone()));
+    Ok(client)
 }
 
 pub(crate) async fn execute(

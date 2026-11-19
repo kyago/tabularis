@@ -26,6 +26,8 @@ interface SelectProps {
     indents?: Record<string, number>;
     /** Id of extra text that describes the control, such as a field hint. */
     ariaDescribedBy?: string;
+    /** Lets typed text that is not in `options` be chosen; returns that row's label. */
+    customOption?: (value: string) => string;
 }
 
 export const Select = ({
@@ -44,6 +46,7 @@ export const Select = ({
     labels,
     indents,
     ariaDescribedBy,
+    customOption,
 }: SelectProps) => {
     const [isOpen, setIsOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
@@ -108,6 +111,9 @@ export const Select = ({
           )
         : options;
 
+    const typed = searchQuery.trim();
+    const customValue = customOption && typed && !options.includes(typed) ? typed : null;
+
     const handleSelect = (option: string) => {
         onChange(option);
         setIsOpen(false);
@@ -143,8 +149,11 @@ export const Select = ({
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="w-full bg-transparent border-none text-sm text-primary focus:outline-none placeholder:text-muted"
                             onKeyDown={(e) => {
-                                if (e.key === 'Enter' && filteredOptions.length > 0)
-                                    handleSelect(filteredOptions[0]);
+                                if (e.key === 'Enter') {
+                                    if (customValue) handleSelect(customValue);
+                                    else if (filteredOptions.length > 0)
+                                        handleSelect(filteredOptions[0]);
+                                }
                                 if (e.key === 'Escape') setIsOpen(false);
                             }}
                         />
@@ -161,7 +170,15 @@ export const Select = ({
             )}
 
             <div className="overflow-y-auto flex-1 p-1 scrollbar-thin scrollbar-thumb-surface-tertiary scrollbar-track-transparent">
-                {filteredOptions.length === 0 ? (
+                {customValue && (
+                    <button
+                        onClick={() => handleSelect(customValue)}
+                        className="w-full text-left px-3 py-2 text-sm rounded transition-colors text-primary hover:bg-surface-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                    >
+                        <span className="truncate">{customOption?.(customValue)}</span>
+                    </button>
+                )}
+                {filteredOptions.length === 0 && !customValue ? (
                     <div className="p-3 text-sm text-muted text-center italic">
                         {noResultsLabel}
                     </div>

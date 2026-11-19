@@ -27,7 +27,9 @@ function fixture(text = 'SELECT ') {
         events.set(name, listener);
         return {dispose};
     };
+    const pending = {set: vi.fn(), clear: vi.fn()};
     const editor = {
+        createDecorationsCollection: () => pending,
         getModel: () => model,
         getPosition: () => currentPosition,
         hasTextFocus: () => true,
@@ -55,6 +57,7 @@ function fixture(text = 'SELECT ') {
             ) {}
         },
         languages: {
+            InlineCompletionTriggerKind: {Automatic: 0, Explicit: 1},
             registerInlineCompletionsProvider: vi.fn((_language, next) => {
                 provider = next;
                 return {dispose};
@@ -80,11 +83,14 @@ function fixture(text = 'SELECT ') {
             return {dispose};
         }),
     } as unknown as Monaco.CancellationToken;
-    const provide = (selectedSuggestionInfo?: Monaco.languages.SelectedSuggestionInfo) =>
+    const provide = (
+        selectedSuggestionInfo?: Monaco.languages.SelectedSuggestionInfo,
+        triggerKind = 0,
+    ) =>
         provider.provideInlineCompletions(
             model,
             currentPosition,
-            {selectedSuggestionInfo} as Monaco.languages.InlineCompletionContext,
+            {selectedSuggestionInfo, triggerKind} as Monaco.languages.InlineCompletionContext,
             token,
         );
     return {
@@ -93,6 +99,7 @@ function fixture(text = 'SELECT ') {
         monaco,
         call,
         provide,
+        pending,
         events,
         dispose,
         registration,
@@ -218,6 +225,40 @@ describe('AI inline completion', () => {
         expect(await result).toEqual({items: []});
         expect(await f.provide()).toEqual({items: []});
         expect(f.call).toHaveBeenCalledTimes(1);
+        f.registration.dispose();
+    });
+
+    it('marks the cursor while a completion is being generated and clears it afterwards', async () => {
+        const f = fixture();
+        let finish!: (text: string) => void;
+        f.call.mockReturnValue(new Promise<string>((resolve) => (finish = resolve)));
+        const result = f.provide();
+        await vi.advanceTimersByTimeAsync(599);
+        expect(f.pending.set).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1);
+        expect(f.pending.set).toHaveBeenCalledWith([
+            {
+                range: {startLineNumber: 1, startColumn: 8, endLineNumber: 1, endColumn: 8},
+                options: {afterContentClassName: 'ai-inline-pending', showIfCollapsed: true},
+            },
+        ]);
+        expect(f.pending.clear).not.toHaveBeenCalled();
+        finish(' FROM users');
+        expect((await result)?.items).toHaveLength(1);
+        expect(f.pending.clear).toHaveBeenCalled();
+        f.registration.dispose();
+    });
+
+    it('lets an explicit trigger skip the typing pause and the failure backoff', async () => {
+        const f = fixture();
+        f.call.mockRejectedValueOnce(new Error('provider unavailable'));
+        const failed = f.provide();
+        await vi.advanceTimersByTimeAsync(600);
+        expect(await failed).toEqual({items: []});
+
+        const result = f.provide(undefined, 1);
+        await vi.advanceTimersByTimeAsync(0);
+        expect((await result)?.items).toHaveLength(1);
         f.registration.dispose();
     });
 

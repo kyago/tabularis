@@ -161,7 +161,10 @@ async fn optional_key_is_omitted_and_minimax_retries_its_second_endpoint() {
     .await;
     let mut manifest =
         parse_manifest(tests::package("custom-openai").to_string().as_bytes()).unwrap();
-    route(&mut manifest.ai_assistant.generate.requests[0], addr);
+    // Without a reasoning_effort setting the first request is skipped unsent.
+    for request in &mut manifest.ai_assistant.generate.requests {
+        route(request, addr);
+    }
     let variables = json!({"settings":{},"model":"local","prompt":"p","system_prompt":"s"});
     let client = reqwest::Client::builder().no_proxy().build().unwrap();
     assert!(

@@ -330,6 +330,16 @@
     "overridable": true
   },
   {
+    "id": "trigger_ai_inline",
+    "category": "editor",
+    "defaultMac": "⌥+\\",
+    "defaultWin": "Alt+\\",
+    "macMatch": {"altKey": true, "key": "\\", "code": "Backslash"},
+    "winMatch": {"altKey": true, "key": "\\", "code": "Backslash"},
+    "i18nKey": "settings.shortcuts.triggerAiInline",
+    "overridable": true
+  },
+  {
     "id": "format_sql",
     "category": "editor",
     "defaultMac": "Shift+⌥+F",

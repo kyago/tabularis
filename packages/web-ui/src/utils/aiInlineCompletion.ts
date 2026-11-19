@@ -82,6 +82,8 @@ export function installAiInlineCompletion(
     let composing = false;
     let controller: AbortController | null = null;
     let retryAfter = 0;
+    // Dots at the cursor while the provider is generating.
+    const pending = editor.createDecorationsCollection();
     const invalidate = () => {
         controller?.abort();
         controller = null;
@@ -105,11 +107,14 @@ export function installAiInlineCompletion(
     ];
     const provider = monaco.languages.registerInlineCompletionsProvider('sql', {
         async provideInlineCompletions(model, position, context, token) {
+            // Asked for by shortcut: no typing pause, and retry even after a failure.
+            const explicit =
+                context.triggerKind === monaco.languages.InlineCompletionTriggerKind.Explicit;
             if (
                 disposed ||
                 composing ||
                 token.isCancellationRequested ||
-                Date.now() < retryAfter ||
+                (!explicit && Date.now() < retryAfter) ||
                 editor.getModel() !== model ||
                 !editor.hasTextFocus() ||
                 editor.getOption(monaco.editor.EditorOption.readOnly) ||
@@ -125,21 +130,41 @@ export function installAiInlineCompletion(
             controller = current;
             const version = model.getVersionId();
             const cancellation = token.onCancellationRequested(() => current.abort());
+            const at = new monaco.Range(
+                position.lineNumber,
+                position.column,
+                position.lineNumber,
+                position.column,
+            );
+            let shown = false;
             try {
                 const ready = await new Promise<boolean>((resolve) => {
                     const aborted = () => {
                         clearTimeout(timer);
                         resolve(false);
                     };
-                    const timer = setTimeout(() => {
-                        current.signal.removeEventListener('abort', aborted);
-                        resolve(true);
-                    }, 600);
+                    const timer = setTimeout(
+                        () => {
+                            current.signal.removeEventListener('abort', aborted);
+                            resolve(true);
+                        },
+                        explicit ? 0 : 600,
+                    );
                     current.signal.addEventListener('abort', aborted, {once: true});
                     if (current.signal.aborted) aborted();
                 });
                 if (!ready || disposed || composing || current.signal.aborted) return {items: []};
                 const requestId = createRequestId();
+                pending.set([
+                    {
+                        range: at,
+                        options: {
+                            afterContentClassName: 'ai-inline-pending',
+                            showIfCollapsed: true,
+                        },
+                    },
+                ]);
+                shown = true;
                 const text = await new Promise<string | null>((resolve) => {
                     const aborted = () => {
                         void client.call('cancel_ai_inline', {requestId}).catch(() => {});
@@ -191,22 +216,13 @@ export function installAiInlineCompletion(
                 )
                     return {items: []};
                 return {
-                    items: [
-                        {
-                            insertText: text,
-                            range: new monaco.Range(
-                                position.lineNumber,
-                                position.column,
-                                position.lineNumber,
-                                position.column,
-                            ),
-                        },
-                    ],
+                    items: [{insertText: text, range: at}],
                     suppressSuggestions: false,
                 };
             } finally {
                 cancellation.dispose();
                 if (controller === current) controller = null;
+                if (shown) pending.clear();
             }
         },
         disposeInlineCompletions() {},

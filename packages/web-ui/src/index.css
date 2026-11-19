@@ -683,6 +683,34 @@ select option:active {
     background-color: color-mix(in srgb, var(--accent-primary) 10%, transparent);
 }
 
+/* AI inline completion in progress: pulsing dots at the cursor. */
+.ai-inline-pending::after {
+    content: '•••';
+    /* Out of flow, so the text after the cursor does not shift. */
+    position: absolute;
+    margin-left: 2px;
+    color: var(--text-accent);
+    letter-spacing: 1px;
+    pointer-events: none;
+    animation: ai-inline-pending 1s ease-in-out infinite;
+}
+
+@keyframes ai-inline-pending {
+    0%,
+    100% {
+        opacity: 0.25;
+    }
+    50% {
+        opacity: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ai-inline-pending::after {
+        animation: none;
+    }
+}
+
 /* Read-only preview shown when hovering a collapsed SQL query. */
 .sql-fold-preview {
     position: fixed;

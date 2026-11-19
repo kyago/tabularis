@@ -992,6 +992,37 @@ describe('SqlEditorWrapper', () => {
         expect(trigger).not.toHaveBeenCalled();
     });
 
+    it('triggers AI inline completion on its shortcut, closing the suggestion list that blocks it', () => {
+        matchesShortcutMock.mockImplementation((_event, id) => id === 'trigger_ai_inline');
+        render(
+            <SqlEditorWrapper
+                initialValue=""
+                onChange={mockOnChange}
+                onRun={mockOnRun}
+                editorKey="ai-inline-shortcut"
+            />,
+            {wrapper},
+        );
+        const {keyDownHandlers, trigger} = mountCapturedEditor();
+        const event = {
+            browserEvent: new KeyboardEvent('keydown', {
+                key: '\\',
+                code: 'Backslash',
+                altKey: true,
+            }),
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn(),
+        };
+
+        keyDownHandlers[0](event);
+
+        expect(event.preventDefault).toHaveBeenCalledOnce();
+        expect(trigger.mock.calls.map(([, id]) => id)).toEqual([
+            'hideSuggestWidget',
+            'editor.action.inlineSuggest.trigger',
+        ]);
+    });
+
     it('leaves the unified palette shortcut available to Monaco chords', () => {
         matchesShortcutMock.mockImplementation((_event, id) => id === 'command_palette');
         render(
@@ -1104,6 +1135,38 @@ describe('SqlEditorWrapper', () => {
         const runBlockComment = bindingCall?.[1] as (() => void) | undefined;
         runBlockComment?.();
         expect(trigger).toHaveBeenCalledWith('keyboard', 'editor.action.blockComment', {});
+    });
+
+    // Monaco's addCommand keybindings are shared by every editor on the page, so
+    // the last mounted editor (a hidden notebook cell) stole Cmd+Enter from the
+    // console. addAction scopes the binding to its own editor.
+    it('binds Run and Run All as editor-scoped actions, not global commands', () => {
+        const onRunAll = vi.fn();
+        render(
+            <SqlEditorWrapper
+                initialValue=""
+                onChange={mockOnChange}
+                onRun={mockOnRun}
+                onRunAll={onRunAll}
+                editorKey="scoped-run"
+            />,
+            {wrapper},
+        );
+        const {addAction, addCommand} = mountCapturedEditor();
+        const run = 1 | 64;
+        const runAll = 1 | 2 | 64;
+        const actionFor = (keybinding: number) =>
+            addAction.mock.calls
+                .map(([action]) => action as {keybindings?: number[]; run: () => void})
+                .find((action) => action.keybindings?.includes(keybinding));
+
+        actionFor(run)?.run();
+        actionFor(runAll)?.run();
+
+        expect(mockOnRun).toHaveBeenCalledTimes(1);
+        expect(onRunAll).toHaveBeenCalledTimes(1);
+        expect(addCommand.mock.calls.map(([keybinding]) => keybinding)).not.toContain(run);
+        expect(addCommand.mock.calls.map(([keybinding]) => keybinding)).not.toContain(runAll);
     });
 
     describe('acceptSuggestionOnEnter mapping', () => {

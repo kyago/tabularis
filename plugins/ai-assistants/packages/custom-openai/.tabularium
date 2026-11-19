@@ -25,7 +25,24 @@
                 "content": "{{prompt}}"
               }
             ],
-            "temperature": 0.0
+            "reasoning_effort": "{{settings.reasoning_effort}}"
+          },
+          "append_path": "/chat/completions"
+        },
+        {
+          "url": "{{settings.base_url}}",
+          "body": {
+            "model": "{{model}}",
+            "messages": [
+              {
+                "role": "system",
+                "content": "{{system_prompt}}"
+              },
+              {
+                "role": "user",
+                "content": "{{prompt}}"
+              }
+            ]
           },
           "append_path": "/chat/completions"
         }
@@ -61,6 +78,13 @@
       "key": "model",
       "label": "Default model",
       "type": "string"
+    },
+    {
+      "key": "reasoning_effort",
+      "label": "Reasoning effort",
+      "type": "string",
+      "description": "Only for reasoning models; leave unset otherwise. Lower is faster: none gives the quickest inline completions, at some cost to complex query generation.",
+      "options": ["none", "low", "medium", "high"]
     }
   ],
   "license": "Apache-2.0",
