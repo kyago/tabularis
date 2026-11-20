@@ -181,6 +181,12 @@
     }
   },
   "sidebar": {
+    "noOpenConnection": "사이드바에서 연결을 선택하거나 새 연결을 추가하세요.",
+    "moreConnectionActions": "연결 추가 작업",
+    "consoles": "콘솔 목록",
+    "noConsoles": "콘솔 없음",
+    "selectConnections": "여러 개 선택…",
+    "reviewMigration": "PostgreSQL 플러그인 전환 검토…",
     "connections": "연결",
     "settings": "설정",
     "savedQueries": "저장된 쿼리",
@@ -489,6 +495,13 @@
     }
   },
   "connections": {
+    "selectedCount": "{{count}}개 선택",
+    "moveSelected": "선택 항목 이동",
+    "exportSelected": "선택 항목 내보내기",
+    "deleteSelected": "선택 항목 삭제",
+    "deselectAll": "선택 종료",
+    "deleteSelectedTitle": "선택한 연결 삭제",
+    "confirmDeleteSelected": "선택한 연결 {{count}}개를 삭제하시겠습니까?",
     "title": "연결",
     "addConnection": "연결 추가",
     "deprecated": "사용 중단",
@@ -717,8 +730,8 @@
     "rowEditorFollowSelection": "행 편집기가 선택을 따라감",
     "rowEditorFollowSelectionDesc": "행 편집기 사이드바가 열려 있을 때 새로 선택한 행을 자동으로 표시합니다.",
     "sidebarSection": "사이드바",
-    "groupSidebarConnectionsByFolder": "열린 연결을 폴더별로 묶기",
-    "groupSidebarConnectionsByFolderDesc": "사이드바에서 열린 연결을 단일 목록 대신 연결 폴더별로 표시합니다.",
+    "groupSidebarConnectionsByFolder": "연결을 폴더 트리로 표시",
+    "groupSidebarConnectionsByFolderDesc": "사이드바에 저장된 모든 연결을 연결 화면의 폴더 순서 그대로 이름과 함께 표시하고, 연결 화면 대신 사이드바에서 추가·편집·이동·삭제합니다. 끄면 열린 연결만 아이콘으로 표시합니다.",
     "cellDoubleClickAction": "셀 더블클릭 동작",
     "cellDoubleClickActionDesc": "데이터 셀을 더블클릭할 때 수행할 동작을 선택합니다.",
     "cellDoubleClickInline": "인라인 편집",
@@ -2938,7 +2951,8 @@
     "groupName": "그룹 이름",
     "dragHint": "여기로 연결을 끌어다 놓으세요",
     "createError": "그룹 생성에 실패했습니다",
-    "subgroupNamePrompt": "하위 폴더 이름 (중첩 단계는 /로 구분)"
+    "subgroupNamePrompt": "하위 폴더 이름 (중첩 단계는 /로 구분)",
+    "newSubfolder": "새 하위 폴더"
   },
   "queryModal": {
     "database": "데이터베이스",

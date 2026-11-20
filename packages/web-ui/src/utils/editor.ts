@@ -552,3 +552,25 @@ export function toSqlList(text: string, options: SqlListOptions = {}): string {
         .map((value) => `${quote}${value.split(quote).join(quote + quote)}${quote}`)
         .join(separator);
 }
+
+export interface ConsoleSummary {
+    id: string;
+    title: string;
+    /** First non-empty line of the console's SQL. */
+    preview: string;
+}
+
+/** A connection's console tabs, for the sidebar's per-connection console list. */
+export function consoleSummaries(tabs: readonly Tab[]): ConsoleSummary[] {
+    return tabs
+        .filter((tab) => tab.type === 'console')
+        .map((tab) => ({
+            id: tab.id,
+            title: tab.title,
+            preview:
+                (tab.query ?? '')
+                    .split('\n')
+                    .map((line) => line.trim())
+                    .find(Boolean) ?? '',
+        }));
+}

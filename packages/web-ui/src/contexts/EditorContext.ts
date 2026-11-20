@@ -24,6 +24,11 @@ export interface EditorContextType {
      * connection's tabs have loaded).
      */
     openNotebook: (connectionId: string, notebookId: string, title: string) => void;
+    /**
+     * Focus a saved tab of a connection (the sidebar's console list). Like
+     * `openNotebook`, it waits until that connection is active and its tabs loaded.
+     */
+    openTab: (connectionId: string, tabId: string) => void;
     closeTab: (id: string) => void;
     closeAllTabs: () => void;
     closeOtherTabs: (id: string) => void;

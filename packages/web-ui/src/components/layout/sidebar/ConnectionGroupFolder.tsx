@@ -1,6 +1,6 @@
 import type {ReactNode} from 'react';
-import {Folder, FolderOpen} from 'lucide-react';
-import {useTranslation} from 'react-i18next';
+import clsx from 'clsx';
+import {ChevronDown, ChevronRight, Folder, FolderOpen} from 'lucide-react';
 import {RailIndicator} from './RailIndicator';
 
 interface Props {
@@ -10,9 +10,20 @@ interface Props {
     isCollapsed: boolean;
     hasActiveConnection: boolean;
     onToggle: () => void;
+    /** Nesting level, for indentation. */
+    depth?: number;
+    onContextMenu?: (e: React.MouseEvent) => void;
+    /** Marks the folder and its header as drop targets for the tree's drag. */
+    groupId?: string;
+    onHeaderMouseDown?: (e: React.MouseEvent) => void;
+    /** Where a dragged folder would land relative to this one. */
+    dropPosition?: 'before' | 'after' | 'inside' | null;
+    /** A dragged connection is over this folder. */
+    isDragOver?: boolean;
     children: ReactNode;
 }
 
+/** A folder row of the sidebar connection tree. */
 export const ConnectionGroupFolder = ({
     name,
     path,
@@ -20,50 +31,55 @@ export const ConnectionGroupFolder = ({
     isCollapsed,
     hasActiveConnection,
     onToggle,
+    depth = 0,
+    onContextMenu,
+    groupId,
+    onHeaderMouseDown,
+    dropPosition = null,
+    isDragOver = false,
     children,
 }: Props) => {
-    const {t} = useTranslation();
+    const Chevron = isCollapsed ? ChevronRight : ChevronDown;
 
     return (
-        <div className="w-full flex flex-col items-center">
-            <div className="relative group w-full flex flex-col items-center mb-0.5">
+        <div className="w-full flex flex-col" data-group-id={groupId}>
+            <div className="relative group w-full" data-group-header-id={groupId}>
+                {(dropPosition === 'before' || dropPosition === 'after') && (
+                    <div
+                        className={clsx(
+                            'absolute left-2 right-2 h-0.5 bg-accent-primary rounded-full z-30 pointer-events-none',
+                            dropPosition === 'before' ? '-top-px' : '-bottom-px',
+                        )}
+                    />
+                )}
                 <RailIndicator isActive={isCollapsed && hasActiveConnection} />
                 <button
                     type="button"
                     onClick={onToggle}
+                    onMouseDown={onHeaderMouseDown}
+                    onContextMenu={onContextMenu}
                     aria-expanded={!isCollapsed}
                     aria-label={path}
-                    className="flex items-center justify-center w-12 h-10 rounded-lg transition-all text-muted hover:text-secondary hover:bg-surface-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                    title={path}
+                    style={{paddingLeft: 8 + depth * 12}}
+                    className={clsx(
+                        'w-full h-7 flex items-center gap-1.5 pr-2 rounded text-xs font-medium text-secondary transition-colors hover:text-primary hover:bg-surface-secondary focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus',
+                        (isDragOver || dropPosition === 'inside') &&
+                            'ring-1 ring-inset ring-accent-primary bg-accent-primary/10',
+                    )}
                 >
-                    <div className="relative">
-                        {isCollapsed ? (
-                            <Folder size={20} className="text-accent-warning/70" />
-                        ) : (
-                            <FolderOpen size={20} className="text-accent-warning" />
-                        )}
-                        <div className="absolute -bottom-1 -right-1.5 min-w-[14px] h-[14px] bg-surface-secondary border border-default rounded-full flex items-center justify-center text-[9px] font-bold text-secondary px-0.5">
-                            {count}
-                        </div>
-                    </div>
+                    <Chevron size={12} className="shrink-0 text-muted" />
+                    {isCollapsed ? (
+                        <Folder size={14} className="shrink-0 text-accent-warning/70" />
+                    ) : (
+                        <FolderOpen size={14} className="shrink-0 text-accent-warning" />
+                    )}
+                    <span className="truncate flex-1 text-left">{name}</span>
+                    <span className="shrink-0 text-[10px] text-muted">{count}</span>
                 </button>
-
-                <span className="text-[9px] text-muted leading-tight max-w-[56px] truncate text-center select-none">
-                    {name}
-                </span>
-
-                <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface-secondary text-primary text-xs px-2 py-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-30 pointer-events-none shadow-lg border border-default">
-                    <div className="font-medium">{path}</div>
-                    <div className="text-muted text-[10px]">
-                        {count} {count === 1 ? t('groups.connection') : t('groups.connections')}
-                    </div>
-                </div>
             </div>
 
-            {!isCollapsed && (
-                <div className="w-full flex flex-col items-center bg-surface-secondary/40 pt-1 mb-1">
-                    {children}
-                </div>
-            )}
+            {!isCollapsed && <div className="w-full flex flex-col">{children}</div>}
         </div>
     );
 };

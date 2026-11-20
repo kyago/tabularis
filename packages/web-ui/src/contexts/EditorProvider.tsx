@@ -426,6 +426,28 @@ export const EditorProvider = ({children}: {children: ReactNode}) => {
         resolvePendingNotebook();
     }, [resolvePendingNotebook]);
 
+    // A saved tab picked in the sidebar's console list. It waits until the tab is
+    // actually among the connection's loaded tabs: `isLoading` is not enough, it is
+    // still false for a moment after switching to a connection not loaded yet.
+    const pendingTabRef = useRef<{connectionId: string; tabId: string} | null>(null);
+    const resolvePendingTab = useCallback(() => {
+        const pending = pendingTabRef.current;
+        if (!pending || pending.connectionId !== activeConnectionId) return;
+        if (!tabs.some((t) => t.id === pending.tabId)) return;
+        pendingTabRef.current = null;
+        setActiveTabId(pending.tabId);
+    }, [tabs, activeConnectionId, setActiveTabId]);
+    const openTab = useCallback(
+        (connectionId: string, tabId: string) => {
+            pendingTabRef.current = {connectionId, tabId};
+            resolvePendingTab();
+        },
+        [resolvePendingTab],
+    );
+    useEffect(() => {
+        resolvePendingTab();
+    }, [resolvePendingTab]);
+
     // Record tabs closed by the close actions below on their connection's
     // reopen stack. Runs outside the setTabs updater so React strict mode's
     // double invocation cannot push an entry twice.
@@ -660,6 +682,7 @@ export const EditorProvider = ({children}: {children: ReactNode}) => {
             activeTab,
             addTab,
             openNotebook,
+            openTab,
             closeTab,
             updateTab,
             reorderTab,
@@ -682,6 +705,7 @@ export const EditorProvider = ({children}: {children: ReactNode}) => {
             activeTab,
             addTab,
             openNotebook,
+            openTab,
             closeTab,
             updateTab,
             reorderTab,

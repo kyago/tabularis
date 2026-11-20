@@ -2,6 +2,7 @@ import {webPath} from '@/utils/webBasePath';
 import {lazy, Suspense, useState, useEffect, useMemo, useCallback, useRef} from 'react';
 import {useNavigate, useLocation} from 'react-router-dom';
 import {useTranslation} from 'react-i18next';
+import clsx from 'clsx';
 import {
     Plug2,
     Settings,
@@ -12,6 +13,10 @@ import {
     Clock,
     BookOpen,
     FolderTree,
+    Plus,
+    MoreHorizontal,
+    Search,
+    SquareTerminal,
 } from 'lucide-react';
 import {DiscordIcon} from '@/components/icons/DiscordIcon';
 import {usePlatformCapabilities} from '@/hooks/usePlatformCapabilities';
@@ -26,6 +31,14 @@ import {RailIndicator} from './sidebar/RailIndicator';
 import {OpenConnectionItem} from './sidebar/OpenConnectionItem';
 import {ConnectionGroupItem} from './sidebar/ConnectionGroupItem';
 import {ConnectionGroupFolder} from './sidebar/ConnectionGroupFolder';
+import {useConnectionTreeActions} from './sidebar/useConnectionTreeActions';
+import {useConnectionTreeDrag} from './sidebar/useConnectionTreeDrag';
+import {useConnectionTags} from '@/hooks/useConnectionTags';
+import {fuzzyFilter} from '@/utils/fuzzy';
+import {consoleSummaries, loadEditorPreferences, type ConsoleSummary} from '@/utils/editor';
+import {useEditor} from '@/hooks/useEditor';
+import {useTabularisClient} from '@/hooks/useTabularisClient';
+import type {SavedConnection} from '@/contexts/DatabaseContext';
 import type {SidebarTab} from './ExplorerSidebar';
 import {LoadingState} from '@/components/ui/LoadingState';
 import {PanelDatabaseProvider} from './PanelDatabaseProvider';
@@ -41,7 +54,10 @@ import {rectContains, startPointerDrag} from '@/utils/pointerDrag';
 import {useDrivers} from '@/hooks/useDrivers';
 import {useKeybindings} from '@/hooks/useKeybindings';
 import {useSettings} from '@/hooks/useSettings';
-import {groupSidebarConnections} from '@/utils/connectionManager';
+import {groupSidebarConnections, inSavedOrder} from '@/utils/connectionManager';
+import {useAlert} from '@/hooks/useAlert';
+import {toErrorMessage} from '@/utils/errors';
+import {buildEditorRoute, isEditorRoute, type ConnectionsRouteState} from '@/routing';
 import {useAvailableUpdates} from '@/hooks/useAvailableUpdates';
 import {UpdateBadge} from '@/components/ui/UpdateBadge';
 
@@ -51,13 +67,68 @@ const ExplorerSidebar = lazy(() =>
     })),
 );
 
+/** The consoles saved with one connection, listed under it in the tree. */
+const ConnectionConsoleList = ({
+    consoles,
+    activeId,
+    depth,
+    emptyLabel,
+    onOpen,
+}: {
+    consoles: ConsoleSummary[];
+    activeId: string | null;
+    depth: number;
+    emptyLabel: string;
+    onOpen: (tabId: string) => void;
+}) => {
+    const paddingLeft = 8 + depth * 12 + 14;
+    if (consoles.length === 0) {
+        return (
+            <div
+                className="w-full h-6 flex items-center text-[11px] italic text-muted"
+                style={{paddingLeft}}
+            >
+                {emptyLabel}
+            </div>
+        );
+    }
+    return consoles.map((item) => (
+        <button
+            key={item.id}
+            type="button"
+            onClick={() => onOpen(item.id)}
+            aria-current={item.id === activeId ? 'true' : undefined}
+            title={item.preview || item.title}
+            style={{paddingLeft}}
+            className={clsx(
+                'w-full h-6 flex items-center gap-1.5 pr-2 rounded text-[11px] text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus',
+                item.id === activeId
+                    ? 'bg-surface-secondary text-primary'
+                    : 'text-secondary hover:bg-surface-secondary hover:text-primary',
+            )}
+        >
+            <SquareTerminal size={11} className="shrink-0 text-muted" />
+            <span className="truncate shrink-0 max-w-full">{item.title}</span>
+            {item.preview && <span className="truncate flex-1 text-muted">{item.preview}</span>}
+        </button>
+    ));
+};
+
 export const Sidebar = () => {
     const platform = usePlatformCapabilities();
     const {t} = useTranslation();
     const updates = useAvailableUpdates();
     const {currentTheme} = useTheme();
     const isDarkTheme = !currentTheme?.id?.includes('-light');
-    const {activeConnectionId, activeDriver, connections, connectionGroups} = useDatabase();
+    const {
+        activeConnectionId,
+        activeDriver,
+        connections,
+        connectionGroups,
+        isConnectionOpenAnywhere,
+        toggleGroupCollapsed,
+    } = useDatabase();
+    const {showAlert} = useAlert();
     const {settings} = useSettings();
     const navigate = useNavigate();
     const location = useLocation();
@@ -90,7 +161,9 @@ export const Sidebar = () => {
     }, [isMac]);
 
     const {
+        connections: connectionStatuses,
         openConnections,
+        handleConnect,
         handleDisconnect: disconnectConnection,
         handleSwitch,
     } = useConnectionManager();
@@ -129,41 +202,104 @@ export const Sidebar = () => {
         });
     }, [openConnections, splitView, sidebarOrder]);
 
-    const sidebarFolders = useMemo(
-        () =>
-            settings.groupSidebarConnectionsByFolder === true
-                ? groupSidebarConnections(sortedSidebarConnections, connections, connectionGroups)
-                : null,
-        [
-            settings.groupSidebarConnectionsByFolder,
-            sortedSidebarConnections,
-            connections,
-            connectionGroups,
-        ],
+    // Tree mode lists every saved connection by name at its saved position, open
+    // or not, so opening and closing never moves the others.
+    const treeMode = settings.groupSidebarConnectionsByFolder === true;
+    const [treeSearch, setTreeSearch] = useState('');
+    const {tags} = useConnectionTags();
+    const tagById = new Map(tags.map((tag) => [tag.id, tag]));
+    const tagsOf = (saved: SavedConnection | undefined) =>
+        (saved?.tag_ids ?? []).flatMap((id) => tagById.get(id) ?? []);
+    const isSearching = treeMode && treeSearch.trim() !== '';
+    // Name, driver and tag names, like the Connections page search.
+    const matchingIds = isSearching
+        ? new Set(
+              fuzzyFilter(
+                  connections,
+                  treeSearch,
+                  (c) =>
+                      `${c.name} ${c.params.driver} ${tagsOf(c)
+                          .map((tag) => tag.name)
+                          .join(' ')}`,
+              ).map((c) => c.id),
+          )
+        : null;
+    const sidebarFolders = treeMode
+        ? groupSidebarConnections(
+              inSavedOrder(connectionStatuses, connections).filter(
+                  (c) => !matchingIds || matchingIds.has(c.id),
+              ),
+              connections,
+              connectionGroups,
+              // Empty folders are worth showing, except among search results.
+              !isSearching,
+          )
+        : null;
+    // In tree mode the sidebar replaces the Connections page.
+    const tree = useConnectionTreeActions({
+        connect: (id, name) => void handleConnectFromRail(id, name),
+    });
+    // Folders remember their collapsed state with the connections, as on the page.
+    const collapsedFolders = new Set(connectionGroups.filter((g) => g.collapsed).map((g) => g.id));
+    const drag = useConnectionTreeDrag({
+        enabled: treeMode && !isSearching && tree.selected === null,
+        onError: (e) =>
+            tree.fail(t('groups.moveError', {defaultValue: 'Failed to move connection'}), e),
+        hasVisibleContent: (groupId) =>
+            !collapsedFolders.has(groupId) &&
+            (connectionGroups.some((g) => g.parent_id === groupId) ||
+                connections.some((c) => c.group_id === groupId)),
+    });
+    const {newConnection} = tree;
+
+    // Consoles saved with each connection, listed under the connections expanded
+    // in the tree. The active connection's come live from the editor; the others
+    // are read from where the editor stores them.
+    const client = useTabularisClient();
+    const editor = useEditor();
+    const [storedConsoles, setStoredConsoles] = useState<Record<string, ConsoleSummary[]>>({});
+    const loadConsoles = useCallback(
+        async (connectionId: string) => {
+            const {tabs} = await loadEditorPreferences(client, connectionId);
+            // Still expanded when the answer arrives?
+            setStoredConsoles((prev) =>
+                connectionId in prev ? {...prev, [connectionId]: consoleSummaries(tabs)} : prev,
+            );
+        },
+        [client],
     );
-    const folderOfConnection = useMemo(
-        () =>
-            new Map(
-                sidebarFolders?.folders.flatMap((f) =>
-                    f.connections.map((c) => [c.id, f.group.id] as const),
-                ) ?? [],
-            ),
-        [sidebarFolders],
-    );
+    const toggleConsoles = (connectionId: string) => {
+        if (connectionId in storedConsoles) {
+            setStoredConsoles((prev) =>
+                Object.fromEntries(Object.entries(prev).filter(([id]) => id !== connectionId)),
+            );
+            return;
+        }
+        setStoredConsoles((prev) => ({...prev, [connectionId]: []}));
+        void loadConsoles(connectionId);
+    };
+    const expandedIds = Object.keys(storedConsoles).join(',');
+    useEffect(() => {
+        // The connection just left may have new or edited consoles: read them again.
+        for (const id of expandedIds ? expandedIds.split(',') : []) void loadConsoles(id);
+    }, [activeConnectionId, expandedIds, loadConsoles]);
+    const openConsole = (conn: ConnectionStatus, tabId: string) => {
+        editor.openTab(conn.id, tabId);
+        if (conn.isOpen) handleOpenInEditor(conn.id);
+        else void handleConnectFromRail(conn.id, conn.name);
+    };
+    const openNewRequested =
+        treeMode && (location.state as ConnectionsRouteState | null)?.openNew === true;
+    useEffect(() => {
+        // The "new connection" shortcut asks the Connections page; answer it here.
+        if (openNewRequested) newConnection();
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- newConnection is a fresh closure each render
+    }, [openNewRequested, location.key]);
     // Hints must match the Cmd/Ctrl+Shift+N shortcut, which switches by open order
     const shortcutIndex = useMemo(
         () => new Map(openConnections.map((c, i) => [c.id, i])),
         [openConnections],
     );
-    const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(() => new Set());
-    const toggleFolder = useCallback((groupId: string) => {
-        setCollapsedFolders((prev) => {
-            const next = new Set(prev);
-            if (next.has(groupId)) next.delete(groupId);
-            else next.add(groupId);
-            return next;
-        });
-    }, []);
 
     // Pointer-based rail drag: reorder connections or drop one onto the split
     // group badge (HTML5 DnD can freeze the WebKitGTK compositor)
@@ -215,9 +351,6 @@ export const Sidebar = () => {
                     let found: {id: string; position: 'above' | 'below'} | null = null;
                     for (const [id, el] of itemRefs.current) {
                         if (id === connId) continue;
-                        if (folderOfConnection.get(id) !== folderOfConnection.get(connId)) {
-                            continue;
-                        }
                         const rect = el.getBoundingClientRect();
                         if (rectContains(rect, x, y)) {
                             found = {
@@ -248,7 +381,7 @@ export const Sidebar = () => {
                 },
             });
         },
-        [splitView, addConnectionToSplit, applySidebarReorder, folderOfConnection],
+        [splitView, addConnectionToSplit, applySidebarReorder],
     );
 
     const handleSwitchToConnection = (connectionId: string) => {
@@ -278,6 +411,22 @@ export const Sidebar = () => {
         }
     };
 
+    async function handleConnectFromRail(connectionId: string, name: string) {
+        try {
+            // Open in another window: focus that window instead of opening a duplicate.
+            if (isConnectionOpenAnywhere(connectionId)) {
+                await openConnectionInNewWindow(connectionId, name);
+                return;
+            }
+            await handleConnect(connectionId);
+            navigate(buildEditorRoute(connectionId));
+        } catch (e) {
+            showAlert(`${t('connections.failConnect', {name})}\n\nError: ${toErrorMessage(e)}`, {
+                kind: 'error',
+            });
+        }
+    }
+
     const handleOpenInEditor = (connectionId: string) => {
         handleSwitch(connectionId);
         navigate('/editor');
@@ -293,8 +442,9 @@ export const Sidebar = () => {
         });
     };
 
-    const renderRailConnection = (conn: ConnectionStatus) => {
-        const idx = shortcutIndex.get(conn.id) ?? 0;
+    const renderRailConnection = (conn: ConnectionStatus, depth = 0) => {
+        const idx = shortcutIndex.get(conn.id);
+        const saved = connections.find((c) => c.id === conn.id);
         return (
             <div
                 key={conn.id}
@@ -305,6 +455,19 @@ export const Sidebar = () => {
                 className="w-full flex flex-col items-center"
             >
                 <OpenConnectionItem
+                    layout={treeMode ? 'row' : 'icon'}
+                    depth={depth}
+                    onConnect={() => void handleConnectFromRail(conn.id, conn.name)}
+                    manageItems={treeMode && saved ? tree.connectionItems(saved) : undefined}
+                    checked={treeMode ? tree.selected?.has(conn.id) : undefined}
+                    isExpanded={conn.id in storedConsoles}
+                    onToggleExpand={
+                        treeMode && tree.selected === null
+                            ? () => toggleConsoles(conn.id)
+                            : undefined
+                    }
+                    onToggleChecked={() => tree.toggleSelected(conn.id)}
+                    tags={treeMode ? tagsOf(saved) : undefined}
                     connection={conn}
                     driverManifest={allDrivers.find((d) => d.id === conn.driver)}
                     isSelected={selectedConnectionIds.has(conn.id)}
@@ -315,11 +478,40 @@ export const Sidebar = () => {
                     onToggleSelect={(isCtrlHeld) => toggleSelection(conn.id, isCtrlHeld)}
                     selectedConnectionIds={selectedConnectionIds}
                     onActivateSplit={activateSplit}
-                    shortcutIndex={idx + 1}
-                    showShortcutHint={showShortcutHints && idx < 9}
-                    onMoveMouseDown={(e) => handleConnectionMoveStart(conn.id, conn.name, e)}
-                    dropIndicator={dropTarget?.id === conn.id ? dropTarget.position : null}
+                    shortcutIndex={idx === undefined ? undefined : idx + 1}
+                    showShortcutHint={showShortcutHints && idx !== undefined && idx < 9}
+                    // The rail reorders its own in-memory list; the tree reorders the saved one.
+                    onMoveMouseDown={(e) =>
+                        treeMode
+                            ? drag.startConnectionDrag(e, conn.id, conn.name)
+                            : handleConnectionMoveStart(conn.id, conn.name, e)
+                    }
+                    dropIndicator={
+                        treeMode
+                            ? drag.connectionDrop?.id === conn.id
+                                ? drag.connectionDrop.position === 'before'
+                                    ? 'above'
+                                    : 'below'
+                                : null
+                            : dropTarget?.id === conn.id
+                              ? dropTarget.position
+                              : null
+                    }
                 />
+                {treeMode && conn.id in storedConsoles && (
+                    <ConnectionConsoleList
+                        // The active connection's consoles are in the editor right now.
+                        consoles={
+                            conn.id === activeConnectionId
+                                ? consoleSummaries(editor.tabs)
+                                : storedConsoles[conn.id]
+                        }
+                        activeId={conn.isActive ? editor.activeTabId : null}
+                        depth={depth + 1}
+                        emptyLabel={t('sidebar.noConsoles')}
+                        onOpen={(tabId) => openConsole(conn, tabId)}
+                    />
+                )}
             </div>
         );
     };
@@ -334,7 +526,12 @@ export const Sidebar = () => {
     return (
         <div className="flex h-full">
             {/* Primary Navigation Bar (Narrow) */}
-            <aside className="w-16 bg-elevated border-r border-default flex flex-col items-center py-4 z-20">
+            <aside
+                className={clsx(
+                    'bg-elevated border-r border-default flex flex-col items-center py-4 z-20',
+                    treeMode ? 'w-64' : 'w-16',
+                )}
+            >
                 <div className="mb-8" title="tabularis">
                     <img
                         src={webPath('/logo.svg')}
@@ -348,17 +545,64 @@ export const Sidebar = () => {
                     />
                 </div>
 
-                <nav className="flex-1 w-full flex flex-col items-center">
-                    <NavItem
-                        to="/connections"
-                        icon={Plug2}
-                        label={t('sidebar.connections')}
-                        isConnected={!!activeConnectionId}
-                    />
+                <nav className="flex-1 min-h-0 w-full flex flex-col items-center">
+                    {treeMode ? (
+                        <>
+                            <div className="w-full flex items-center gap-1 px-2">
+                                <button
+                                    type="button"
+                                    onClick={tree.newConnection}
+                                    className="flex-1 h-8 flex items-center justify-center gap-1.5 rounded-lg text-xs font-medium bg-accent-primary text-inverse hover:bg-accent-primary/90 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                                >
+                                    <Plus size={14} />
+                                    {t('connections.addConnection')}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={(e) => tree.openMenu(e, tree.rootItems)}
+                                    aria-label={t('sidebar.moreConnectionActions')}
+                                    title={t('sidebar.moreConnectionActions')}
+                                    className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-muted hover:bg-surface-secondary hover:text-primary transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                                >
+                                    <MoreHorizontal size={16} />
+                                </button>
+                            </div>
+                            <div className="w-full px-2 mt-2">
+                                <div className="flex items-center gap-1.5 h-7 px-2 bg-base border border-default rounded-lg focus-within:border-focus transition-colors">
+                                    <Search size={12} className="shrink-0 text-muted" />
+                                    <input
+                                        type="search"
+                                        autoCorrect="off"
+                                        autoCapitalize="off"
+                                        autoComplete="off"
+                                        spellCheck={false}
+                                        value={treeSearch}
+                                        onChange={(e) => setTreeSearch(e.target.value)}
+                                        placeholder={t('connections.searchPlaceholder')}
+                                        aria-label={t('connections.searchPlaceholder')}
+                                        className="w-full min-w-0 bg-transparent text-xs text-primary placeholder:text-muted focus:outline-none"
+                                    />
+                                </div>
+                            </div>
+                            {tree.selectionBar}
+                        </>
+                    ) : (
+                        <NavItem
+                            to="/connections"
+                            icon={Plug2}
+                            label={t('sidebar.connections')}
+                            isConnected={!!activeConnectionId}
+                        />
+                    )}
 
-                    {/* Open connections */}
-                    {openConnections.length > 0 && (
-                        <div className="w-full flex flex-col items-center mt-2 pt-2 border-t border-default">
+                    {/* Open connections, or in tree mode every saved one */}
+                    {(treeMode ? true : openConnections.length > 0) && (
+                        <div
+                            className={clsx(
+                                'w-full flex flex-col items-center mt-2 pt-2 border-t border-default',
+                                treeMode && 'flex-1 min-h-0 overflow-y-auto px-1',
+                            )}
+                        >
                             {/* Show group item once if there is a split view */}
                             {splitView && (
                                 <div ref={groupRef} className="w-full">
@@ -377,6 +621,7 @@ export const Sidebar = () => {
                                     {sidebarFolders.folders
                                         .filter(
                                             (folder) =>
+                                                isSearching ||
                                                 !folder.ancestorIds.some((id) =>
                                                     collapsedFolders.has(id),
                                                 ),
@@ -387,26 +632,61 @@ export const Sidebar = () => {
                                                 name={folder.group.name}
                                                 path={folder.path}
                                                 count={folder.connections.length}
-                                                isCollapsed={collapsedFolders.has(folder.group.id)}
+                                                depth={folder.ancestorIds.length}
+                                                onContextMenu={(e) =>
+                                                    tree.openMenu(e, tree.folderItems(folder.group))
+                                                }
+                                                groupId={folder.group.id}
+                                                onHeaderMouseDown={(e) =>
+                                                    drag.startGroupDrag(
+                                                        e,
+                                                        folder.group.id,
+                                                        folder.group.name,
+                                                    )
+                                                }
+                                                dropPosition={
+                                                    drag.groupDrop?.id === folder.group.id
+                                                        ? drag.groupDrop.position
+                                                        : null
+                                                }
+                                                isDragOver={
+                                                    drag.dragOverGroupId === folder.group.id
+                                                }
+                                                // A search shows its matches even in collapsed folders.
+                                                isCollapsed={
+                                                    !isSearching &&
+                                                    collapsedFolders.has(folder.group.id)
+                                                }
                                                 hasActiveConnection={
-                                                    location.pathname === '/editor' &&
+                                                    isEditorRoute(location.pathname) &&
                                                     folder.connections.some((c) => c.isActive)
                                                 }
-                                                onToggle={() => toggleFolder(folder.group.id)}
+                                                onToggle={() =>
+                                                    void toggleGroupCollapsed(folder.group.id)
+                                                }
                                             >
-                                                {folder.connections.map(renderRailConnection)}
+                                                {folder.connections.map((conn) =>
+                                                    renderRailConnection(
+                                                        conn,
+                                                        folder.ancestorIds.length + 1,
+                                                    ),
+                                                )}
                                             </ConnectionGroupFolder>
                                         ))}
-                                    {sidebarFolders.ungrouped.map(renderRailConnection)}
+                                    {sidebarFolders.ungrouped.map((conn) =>
+                                        renderRailConnection(conn),
+                                    )}
                                 </>
                             ) : (
-                                sortedSidebarConnections.map(renderRailConnection)
+                                sortedSidebarConnections.map((conn) => renderRailConnection(conn))
                             )}
                         </div>
                     )}
                 </nav>
 
-                <div className="mt-auto">
+                <div
+                    className={treeMode ? 'pt-2 flex items-start justify-center gap-1' : 'mt-auto'}
+                >
                     <div className="relative mb-2">
                         <button
                             onClick={() => void platform.openExternalUrl(DISCORD_URL)}
@@ -535,6 +815,7 @@ export const Sidebar = () => {
                     ))}
                 </div>
             )}
+            {treeMode && tree.dialogs}
         </div>
     );
 };

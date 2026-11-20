@@ -1,4 +1,3 @@
-import {restoreSession} from '@/utils/restoreSession';
 import {lazy, Suspense, useState, useEffect, useMemo, useRef, useCallback} from 'react';
 import {createPortal} from 'react-dom';
 import {useNavigate, useLocation} from 'react-router-dom';
@@ -29,7 +28,6 @@ import {
 } from 'lucide-react';
 import {useDatabase} from '@/hooks/useDatabase';
 import {useDrivers} from '@/hooks/useDrivers';
-import {useSettings} from '@/hooks/useSettings';
 import clsx from 'clsx';
 import {ContextMenu} from '@/components/ui/ContextMenu';
 import type {SavedConnection} from '@/contexts/DatabaseContext';
@@ -59,15 +57,13 @@ import {usePlatformCapabilities} from '@/hooks/usePlatformCapabilities';
 import {saveGeneratedFile} from '@/utils/connectionFiles';
 import {requestOpenDataFiles} from '@/utils/dataFiles';
 import {buildEditorRoute, type ConnectionsRouteState} from '@/routing';
-import {
-    useBuiltinPostgresMigration,
-    type MigrationOutcome,
-} from '@/hooks/useBuiltinDriverMigration';
+import {useBuiltinPostgresMigration} from '@/hooks/useBuiltinDriverMigration';
 import {useConnectionCatalogue} from '@/hooks/useConnectionCatalogue';
 import {useToast} from '@/hooks/useToast';
+import {useMigrationOutcomeToast} from '@/hooks/useMigrationOutcomeToast';
+import {useRestoreLastSession} from '@/hooks/useRestoreLastSession';
 import {useEscapeKey} from '@/hooks/useEscapeKey';
-import {buildPluginIssueUrl, resolvePluginRepoUrl} from '@/utils/pluginIssueReport';
-import {APP_VERSION} from '@/version';
+import {resolvePluginRepoUrl} from '@/utils/pluginIssueReport';
 
 const NewConnectionModal = lazy(() =>
     import('../components/modals/NewConnectionModal').then((m) => ({
@@ -85,13 +81,10 @@ const MigrationChecklistModal = lazy(() =>
     })),
 );
 
-let autoConnectAttempted = false;
-
 export const Connections = () => {
     const {t} = useTranslation();
     const client = useTabularisClient();
     const platform = usePlatformCapabilities();
-    const {settings, isLoading: isSettingsLoading} = useSettings();
     const navigate = useNavigate();
     const location = useLocation();
     const {
@@ -197,203 +190,13 @@ export const Connections = () => {
         void loadConnections({ifNeeded: true});
     }, [loadConnections]);
 
-    // Surface the migration outcome as a toast per the design's post-migration
-    // spec: success gets an Undo action; failures (connection- or process-level)
-    // get both Undo and Report an issue. The toast is the courtesy nudge, not
-    // the only way back — the per-connection action stays bidirectional even
-    // after this toast is dismissed.
-    //
-    // Called directly where migrateConnection resolves (in handleMigrate's
-    // onConfirm below), not from a useEffect watching a "lastOutcome" piece of
-    // hook state — `migrateConnection` already resolves with the outcome, so
-    // routing it through state just to re-derive a toast from it on the next
-    // render violated .rules/react.md #2 (no synchronous setState-in-effect)
-    // for no benefit. It also meant every migrateConnection call anywhere —
-    // including MigrationChecklistModal's bulk "Migrate N selected" loop,
-    // which has its own per-row status UI — set that same shared state and
-    // fired this toast a second time on top of the checklist's own feedback.
-    const {builtinId, pluginId: defaultPluginId, undoMigration} = migration;
-    const showMigrationOutcomeToast = useCallback(
-        (outcome: MigrationOutcome) => {
-            const handleUndo = () => {
-                void undoMigration(outcome.connectionId).then((result) => {
-                    if (!result.ok) {
-                        showToast(
-                            t('migration.toast.undoFailed', {
-                                name: outcome.connectionName,
-                                error: result.error ?? 'unknown error',
-                            }),
-                            {kind: 'error', duration: 0},
-                        );
-                    }
-                });
-            };
+    const showMigrationOutcomeToast = useMigrationOutcomeToast({
+        migration,
+        catalogueRegistry,
+        installedPlugins,
+    });
 
-            const handleReportIssue = (failureMode: 'connection' | 'process') => {
-                const pluginId = outcome.pluginId ?? defaultPluginId;
-                const registryEntry = catalogueRegistry.find((p) => p.id === pluginId);
-                const repoUrl = resolvePluginRepoUrl(pluginId, registryEntry?.repo_url);
-                if (!repoUrl) {
-                    // No registry entry and no known fallback — nothing to link to; the
-                    // toast action simply has nowhere to send the user.
-                    return;
-                }
-                const installed = installedPlugins.find((p) => p.id === pluginId);
-                const url = buildPluginIssueUrl({
-                    pluginId,
-                    pluginVersion:
-                        installed?.version ?? registryEntry?.installed_version ?? 'unknown',
-                    repoUrl,
-                    appVersion: APP_VERSION,
-                    os: navigator.platform,
-                    template: 'migration-failure',
-                    failureMode,
-                    error: outcome.error ?? outcome.startupError ?? 'unknown error',
-                    migratedFromDriver: builtinId,
-                });
-                void platform.openExternalUrl(url);
-            };
-
-            if (outcome.status === 'ok') {
-                showToast(t('migration.toast.success', {name: outcome.connectionName}), {
-                    kind: 'success',
-                    duration: 0,
-                    actions: [{label: t('migration.toast.undo'), onClick: handleUndo}],
-                });
-            } else if (outcome.status === 'connection' && outcome.preexisting) {
-                // The built-in driver couldn't reach this host either — not a
-                // plugin regression, so no "Report an issue" action.
-                showToast(
-                    t('migration.toast.connectionFailurePreexisting', {
-                        name: outcome.connectionName,
-                        error: outcome.error,
-                    }),
-                    {
-                        kind: 'warning',
-                        duration: 0,
-                        actions: [{label: t('migration.toast.undo'), onClick: handleUndo}],
-                    },
-                );
-            } else if (outcome.status === 'connection') {
-                showToast(
-                    t('migration.toast.connectionFailure', {
-                        name: outcome.connectionName,
-                        error: outcome.error,
-                    }),
-                    {
-                        kind: 'error',
-                        duration: 0,
-                        actions: [
-                            {label: t('migration.toast.undo'), onClick: handleUndo},
-                            {
-                                label: t('migration.toast.reportIssue'),
-                                onClick: () => handleReportIssue('connection'),
-                            },
-                        ],
-                    },
-                );
-            } else if (outcome.status === 'process') {
-                showToast(
-                    outcome.startupError
-                        ? t('migration.toast.processFailureWithError', {
-                              name: outcome.connectionName,
-                              error: outcome.startupError,
-                          })
-                        : t('migration.toast.processFailure', {name: outcome.connectionName}),
-                    {
-                        kind: 'error',
-                        duration: 0,
-                        actions: [
-                            {label: t('migration.toast.undo'), onClick: handleUndo},
-                            {
-                                label: t('migration.toast.reportIssue'),
-                                onClick: () => handleReportIssue('process'),
-                            },
-                        ],
-                    },
-                );
-            } else {
-                // status === "failed": something unexpected happened before the driver
-                // flip could even be confirmed (e.g. the connection vanished
-                // concurrently, or the write itself errored) — Undo is still offered
-                // since flipping back to the built-in driver is safe either way.
-                showToast(
-                    t('migration.toast.failed', {
-                        name: outcome.connectionName,
-                        error: outcome.error ?? 'unknown error',
-                    }),
-                    {
-                        kind: 'error',
-                        duration: 0,
-                        actions: [{label: t('migration.toast.undo'), onClick: handleUndo}],
-                    },
-                );
-            }
-        },
-        [
-            builtinId,
-            defaultPluginId,
-            undoMigration,
-            catalogueRegistry,
-            installedPlugins,
-            platform,
-            showToast,
-            t,
-        ],
-    );
-
-    useEffect(() => {
-        if (autoConnectAttempted) return;
-        // Dedicated connection windows have their own URL-driven restore flow.
-        // Browser sessions have no native windows; they behave like the main window.
-        const windowLabel = platform.currentWindowLabel();
-        if (windowLabel && windowLabel !== 'main') return;
-        if (isSettingsLoading) return;
-        if (connections.length === 0) return;
-        if (settings.autoConnectLastConnection === false) return;
-        autoConnectAttempted = true;
-        void (async () => {
-            try {
-                const [openIds, activeId] = await Promise.all([
-                    client.call('get_last_open_connections', undefined),
-                    client.call('get_last_active_connection', undefined),
-                ]);
-                const toRestore = (openIds ?? []).filter(
-                    (id) => connections.some((c) => c.id === id) && !isConnectionOpen(id),
-                );
-                if (toRestore.length === 0) return;
-                let foregroundId: string | null = null;
-                await restoreSession({
-                    connectionIds: toRestore,
-                    activeId,
-                    connect,
-                    onForegroundStart: (id) => {
-                        foregroundId = id;
-                        setConnectingId(id);
-                    },
-                    onForegroundReady: () => {
-                        setConnectingId(null);
-                        if (foregroundId) navigate(buildEditorRoute(foregroundId));
-                    },
-                    onError: (id, error) =>
-                        console.error(`Auto-connect to connection ${id} failed:`, error),
-                });
-            } catch (e) {
-                console.error('Auto-connect to last connections failed:', e);
-            } finally {
-                setConnectingId(null);
-            }
-        })();
-    }, [
-        client,
-        connections,
-        settings.autoConnectLastConnection,
-        isSettingsLoading,
-        isConnectionOpen,
-        connect,
-        navigate,
-        platform,
-    ]);
+    useRestoreLastSession(setConnectingId);
 
     // Initialize collapsed groups from saved state
     useEffect(() => {

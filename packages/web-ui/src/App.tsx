@@ -8,7 +8,7 @@ import {PluginSlotProvider} from './contexts/PluginSlotProvider';
 import {PluginRuntimeWarningToasts} from './components/plugins/PluginRuntimeWarningToasts';
 import {PluginModalProvider} from './contexts/PluginModalProvider';
 import {AlertProvider} from './contexts/AlertProvider';
-import {Connections} from './pages/Connections';
+import {ConnectionsRoute} from './pages/ConnectionsRoute';
 import {LoadingState} from './components/ui/LoadingState';
 import {LazyConnectionEditorRoute} from './components/ui/LazyConnectionEditorRoute';
 import {ConnectionHealthMonitor} from './components/ConnectionHealthMonitor';
@@ -176,7 +176,7 @@ export function App() {
                                                     />
                                                     <Route
                                                         path={BROWSER_ROUTES.connections}
-                                                        element={<Connections />}
+                                                        element={<ConnectionsRoute />}
                                                     />
                                                     <Route
                                                         path={BROWSER_ROUTES.editor}

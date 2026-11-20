@@ -105,6 +105,41 @@ describe('EditorProvider', () => {
         expect(result.current.activeTab).toBeNull();
     });
 
+    it('opens a saved tab of the connection once its tabs have loaded', async () => {
+        (invoke as ReturnType<typeof vi.fn>).mockImplementation((command: string) =>
+            Promise.resolve(
+                command === 'load_editor_preferences'
+                    ? {
+                          tabs: [
+                              {
+                                  id: 'first',
+                                  title: 'Console',
+                                  type: 'console',
+                                  query: '',
+                                  connectionId: 'conn-1',
+                              },
+                              {
+                                  id: 'second',
+                                  title: 'reports',
+                                  type: 'console',
+                                  query: 'select 1',
+                                  connectionId: 'conn-1',
+                              },
+                          ],
+                          active_tab_id: 'first',
+                      }
+                    : null,
+            ),
+        );
+        const {result} = renderHook(() => useEditor(), {wrapper: createWrapper('conn-1')});
+
+        // Asked before the tabs are in: it must wait for them, then win over the saved active tab.
+        act(() => result.current.openTab('conn-1', 'second'));
+
+        await waitFor(() => expect(result.current.activeTabId).toBe('second'));
+        expect(result.current.tabs.map((tab) => tab.id)).toEqual(['first', 'second']);
+    });
+
     it('should add a new console tab', () => {
         const wrapper = createWrapper('conn-1');
         const {result} = renderHook(() => useEditor(), {wrapper});

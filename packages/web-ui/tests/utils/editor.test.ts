@@ -1,6 +1,7 @@
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import type {Tab, TableSchema, SchemaCache} from '@/types/editor';
 import {
+    consoleSummaries,
     generateTabId,
     createInitialTabState,
     generateTabTitle,
@@ -1503,5 +1504,23 @@ describe('editor', () => {
             expect(result.newTabs.map((t) => t.id)).toEqual(['x', 'p1', 'p2']);
             expect(result.newActiveTabId).toBe('p1');
         });
+    });
+});
+
+describe('consoleSummaries', () => {
+    const tab = (overrides: Partial<Tab>) =>
+        ({id: 't', title: 'Console', type: 'console', query: '', ...overrides}) as Tab;
+
+    it('lists only consoles, with the first line of SQL as a preview', () => {
+        expect(
+            consoleSummaries([
+                tab({id: 'a', query: '\n  -- active users\nselect *\nfrom "user";'}),
+                tab({id: 'b', title: 'coupon', type: 'table', query: 'select 1'}),
+                tab({id: 'c', title: 'reports', query: ''}),
+            ]),
+        ).toEqual([
+            {id: 'a', title: 'Console', preview: '-- active users'},
+            {id: 'c', title: 'reports', preview: ''},
+        ]);
     });
 });

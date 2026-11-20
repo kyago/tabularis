@@ -211,6 +211,12 @@
     }
   },
   "sidebar": {
+    "noOpenConnection": "Select a connection in the sidebar, or add a new one.",
+    "moreConnectionActions": "More connection actions",
+    "consoles": "Consoles",
+    "noConsoles": "No consoles",
+    "selectConnections": "Select connections…",
+    "reviewMigration": "Review PostgreSQL plugin migration…",
     "connections": "Connections",
     "settings": "Settings",
     "savedQueries": "Saved Queries",
@@ -779,8 +785,8 @@
     "rowEditorFollowSelection": "Row editor follows selection",
     "rowEditorFollowSelectionDesc": "When the row editor sidebar is open, automatically update it to show the newly selected row.",
     "sidebarSection": "Sidebar",
-    "groupSidebarConnectionsByFolder": "Group open connections by folder",
-    "groupSidebarConnectionsByFolderDesc": "Show open connections in the sidebar inside their connection folders instead of a flat list.",
+    "groupSidebarConnectionsByFolder": "Show connections as a folder tree",
+    "groupSidebarConnectionsByFolderDesc": "List every saved connection by name in the sidebar, in the folder order of the Connections page, and manage them there: add, edit, move and delete from the sidebar instead of the Connections page. When off, only open connections are shown, as icons.",
     "cellDoubleClickAction": "Cell double-click action",
     "cellDoubleClickActionDesc": "Choose what happens when you double-click a data cell.",
     "cellDoubleClickInline": "Inline edit",

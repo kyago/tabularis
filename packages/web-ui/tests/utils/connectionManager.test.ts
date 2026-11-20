@@ -6,6 +6,7 @@ import {
     getStatusDotClass,
     findConnectionsForDrivers,
     groupSidebarConnections,
+    inSavedOrder,
     type ConnectionStatus,
 } from '@/utils/connectionManager';
 import type {SavedConnection, ConnectionData, ConnectionGroup} from '@/contexts/DatabaseContext';
@@ -316,6 +317,26 @@ describe('connectionManager', () => {
             parent_id,
         });
 
+        it('keeps empty folders when asked, so a new folder shows up in the tree', () => {
+            const groups = [group('pg', 0), group('empty', 1), group('child', 0, 'empty')];
+            const savedList = [saved('pg-local', 'pg')];
+
+            expect(
+                groupSidebarConnections(open('pg-local'), savedList, groups).folders.map(
+                    (f) => f.group.id,
+                ),
+            ).toEqual(['pg']);
+            expect(
+                groupSidebarConnections(open('pg-local'), savedList, groups, true).folders.map(
+                    (f) => [f.group.id, f.connections.length, f.ancestorIds],
+                ),
+            ).toEqual([
+                ['pg', 1, []],
+                ['empty', 0, []],
+                ['child', 0, ['empty']],
+            ]);
+        });
+
         it('puts each open connection in its folder and keeps the rail order inside it', () => {
             const result = groupSidebarConnections(
                 open('pg-stage', 'ch-prod', 'pg-local', 'loose'),
@@ -384,5 +405,25 @@ describe('connectionManager', () => {
             expect(result.folders).toEqual([]);
             expect(result.ungrouped.map((c) => c.id)).toEqual(['a']);
         });
+    });
+});
+
+describe('inSavedOrder', () => {
+    it('orders like the Connections page: by sort_order, unordered ones last and stable', () => {
+        const saved = [
+            {...makeConn(), id: 'new'},
+            {...makeConn(), id: 'second', sort_order: 1},
+            {...makeConn(), id: 'duplicated'},
+            {...makeConn(), id: 'first', sort_order: 0},
+        ];
+        const items = saved.map(({id}) => ({id}));
+
+        expect(inSavedOrder(items, saved).map((c) => c.id)).toEqual([
+            'first',
+            'second',
+            'new',
+            'duplicated',
+        ]);
+        expect(items[0].id).toBe('new');
     });
 });

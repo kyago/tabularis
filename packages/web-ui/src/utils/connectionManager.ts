@@ -81,6 +81,13 @@ export function findConnectionsForDrivers(
     });
 }
 
+/** Orders items like the Connections page: by saved sort_order, unordered ones last. */
+export function inSavedOrder<T extends {id: string}>(items: T[], saved: SavedConnection[]): T[] {
+    const order = new Map(saved.map((c) => [c.id, c.sort_order]));
+    const of = (item: T) => order.get(item.id) ?? Number.MAX_SAFE_INTEGER;
+    return [...items].sort((a, b) => of(a) - of(b));
+}
+
 export interface SidebarFolder<T> {
     group: ConnectionGroup;
     path: string;
@@ -92,6 +99,8 @@ export function groupSidebarConnections<T extends {id: string}>(
     ordered: T[],
     savedConnections: SavedConnection[],
     groups: ConnectionGroup[],
+    /** Also list folders without connections (the tree shows them; the icon rail does not). */
+    includeEmpty = false,
 ): {folders: SidebarFolder<T>[]; ungrouped: T[]} {
     const groupById = new Map(groups.map((g) => [g.id, g]));
     const groupIdOf = new Map(savedConnections.map((c) => [c.id, c.group_id]));
@@ -115,7 +124,7 @@ export function groupSidebarConnections<T extends {id: string}>(
             .sort((a, b) => a.sort_order - b.sort_order);
         for (const group of children) {
             const path = parentPath ? `${parentPath} / ${group.name}` : group.name;
-            const connections = byGroup.get(group.id);
+            const connections = byGroup.get(group.id) ?? (includeEmpty ? [] : undefined);
             if (connections) folders.push({group, path, ancestorIds, connections});
             visit(group.id, path, [...ancestorIds, group.id]);
         }
