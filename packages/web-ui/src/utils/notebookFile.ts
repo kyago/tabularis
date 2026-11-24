@@ -5,14 +5,40 @@ import {
     type NotebookParam,
 } from '@/types/notebook';
 import {generateCellId} from './notebook';
-import {validateParamName} from './notebookParams';
+import {isParamType, normalizeParam, validateParamName} from './notebookParams';
 import {sanitizeKpiConfig} from './notebookKpi';
 
 /**
- * Keep only well-formed params from an untrusted notebook file: name must be
- * a valid identifier (`\w+`) and value must be a string. Malformed entries
- * are dropped instead of failing the whole import.
+ * A well-formed param from an untrusted notebook file, or null. The name must
+ * be a valid identifier (`\w+`) and the value a string. An entry without a
+ * `type` is a raw parameter, as every parameter was before types existed, and
+ * is kept as found. A typed entry must name a known type and carry booleans
+ * and string options where it has them; it is stored in normalized form. Its
+ * value is not validated here: a typed parameter with an invalid value is kept,
+ * so the panel can show what is wrong and the cell does not run with it.
  */
+function sanitizeParam(raw: unknown): NotebookParam | null {
+    if (typeof raw !== 'object' || raw === null) return null;
+    const {name, value, type, isNull, required, options} = raw as Record<string, unknown>;
+    if (typeof name !== 'string' || !validateParamName(name) || typeof value !== 'string') {
+        return null;
+    }
+    if (type === undefined) return raw as NotebookParam;
+    if (!isParamType(type)) return null;
+    if (isNull !== undefined && typeof isNull !== 'boolean') return null;
+    if (required !== undefined && typeof required !== 'boolean') return null;
+    const optionList = options ?? [];
+    if (!Array.isArray(optionList) || !optionList.every((o) => typeof o === 'string')) return null;
+    return normalizeParam({
+        name,
+        value,
+        type,
+        isNull: isNull === true,
+        required: required === true,
+        options: optionList,
+    });
+}
+
 // Width presets written before tiles were resized by dragging.
 const LEGACY_REPORT_WIDTHS: Record<string, number> = {full: 6, half: 3, third: 2};
 
@@ -28,13 +54,13 @@ function sanitizeReportSpan(span: unknown, legacyWidth: unknown): number | undef
     return typeof legacyWidth === 'string' ? LEGACY_REPORT_WIDTHS[legacyWidth] : undefined;
 }
 
+/**
+ * Keep only well-formed params from an untrusted notebook file. Malformed
+ * entries are dropped instead of failing the whole import.
+ */
 function sanitizeParams(raw: unknown): NotebookParam[] | undefined {
     if (!Array.isArray(raw)) return undefined;
-    const params = raw.filter((p): p is NotebookParam => {
-        if (typeof p !== 'object' || p === null) return false;
-        const {name, value} = p as Record<string, unknown>;
-        return typeof name === 'string' && validateParamName(name) && typeof value === 'string';
-    });
+    const params = raw.map(sanitizeParam).filter((p): p is NotebookParam => p !== null);
     return params.length > 0 ? params : undefined;
 }
 
@@ -57,6 +83,7 @@ export function serializeNotebook(
             ...(c.schema ? {schema: c.schema} : {}),
             ...(c.chartConfig ? {chartConfig: c.chartConfig} : {}),
             ...(c.isParallel ? {isParallel: c.isParallel} : {}),
+            ...(c.type === 'sql' && c.isDisabled ? {isDisabled: true} : {}),
             ...(c.isCollapsed ? {isCollapsed: c.isCollapsed} : {}),
             ...(c.isQueryCollapsed ? {isQueryCollapsed: c.isQueryCollapsed} : {}),
             ...(c.isResultCollapsed ? {isResultCollapsed: c.isResultCollapsed} : {}),
@@ -64,7 +91,7 @@ export function serializeNotebook(
             ...(c.kpiConfig ? {kpiConfig: c.kpiConfig} : {}),
             ...(c.isKpiVisible != null ? {isKpiVisible: c.isKpiVisible} : {}),
             ...(c.isQueryPlanVisible != null ? {isQueryPlanVisible: c.isQueryPlanVisible} : {}),
-            ...(c.isReportHidden ? {isReportHidden: true} : {}),
+            ...(c.includeInReport === false ? {includeInReport: false} : {}),
             ...(c.reportSpan ? {reportSpan: c.reportSpan} : {}),
         })),
         ...(params && params.length > 0 ? {params} : {}),
@@ -119,6 +146,8 @@ export function deserializeNotebook(json: string): {
                 schema: c.schema,
                 chartConfig: (cellRaw.chartConfig as NotebookCell['chartConfig']) ?? null,
                 isParallel: cellRaw.isParallel as boolean | undefined,
+                // Files written before cells could be disabled have no flag: enabled.
+                isDisabled: c.type === 'sql' && cellRaw.isDisabled === true ? true : undefined,
                 isCollapsed: cellRaw.isCollapsed as boolean | undefined,
                 isQueryCollapsed: cellRaw.isQueryCollapsed as boolean | undefined,
                 isResultCollapsed: cellRaw.isResultCollapsed as boolean | undefined,
@@ -127,7 +156,13 @@ export function deserializeNotebook(json: string): {
                 isKpiVisible:
                     typeof cellRaw.isKpiVisible === 'boolean' ? cellRaw.isKpiVisible : undefined,
                 isQueryPlanVisible: cellRaw.isQueryPlanVisible as boolean | undefined,
-                isReportHidden: cellRaw.isReportHidden === true ? true : undefined,
+                includeInReport:
+                    typeof cellRaw.includeInReport === 'boolean'
+                        ? cellRaw.includeInReport
+                        : // Files from the local-only report view stored the opposite flag.
+                          cellRaw.isReportHidden === true
+                          ? false
+                          : undefined,
                 reportSpan: sanitizeReportSpan(cellRaw.reportSpan, cellRaw.reportWidth),
                 result: null,
                 error: undefined,

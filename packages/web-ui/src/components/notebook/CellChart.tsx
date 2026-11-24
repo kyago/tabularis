@@ -44,6 +44,7 @@ import {
     getLabelColumns,
     type ChartDataPoint,
 } from '@/utils/notebookChart';
+import {CompactSelect} from '@/components/notebook/CompactSelect';
 
 const CHART_TYPE_LABELS: Record<ChartType, string> = {
     bar: 'Bar',
@@ -80,46 +81,43 @@ function ChartTypeSelector({config, result, onConfigChange}: ChartTypeSelectorPr
                 <span className="text-[10px] text-muted uppercase font-semibold">
                     {t('editor.notebook.chartType')}
                 </span>
-                <select
+                <CompactSelect
                     value={config.type}
                     onChange={(e) => onConfigChange({...config, type: e.target.value as ChartType})}
-                    className="text-[10px] bg-surface-secondary border border-strong rounded px-1 py-0.5 text-secondary"
                 >
                     {CHART_TYPES.map((type) => (
                         <option key={type} value={type}>
                             {CHART_TYPE_LABELS[type]}
                         </option>
                     ))}
-                </select>
+                </CompactSelect>
             </div>
 
             <div className="flex items-center gap-1.5">
                 <span className="text-[10px] text-muted uppercase font-semibold">
                     {t('editor.notebook.chartLabel')}
                 </span>
-                <select
+                <CompactSelect
                     value={config.labelColumn}
                     onChange={(e) => onConfigChange({...config, labelColumn: e.target.value})}
-                    className="text-[10px] bg-surface-secondary border border-strong rounded px-1 py-0.5 text-secondary"
                 >
                     {labelCols.map((col) => (
                         <option key={col} value={col}>
                             {col}
                         </option>
                     ))}
-                </select>
+                </CompactSelect>
             </div>
 
             <div className="flex items-center gap-1.5">
                 <span className="text-[10px] text-muted uppercase font-semibold">
                     {t('editor.notebook.chartSeries')}
                 </span>
-                <select
+                <CompactSelect
                     value={config.seriesColumn ?? ''}
                     onChange={(e) =>
                         onConfigChange({...config, seriesColumn: e.target.value || undefined})
                     }
-                    className="text-[10px] bg-surface-secondary border border-strong rounded px-1 py-0.5 text-secondary"
                 >
                     <option value="">—</option>
                     {result.columns
@@ -129,7 +127,7 @@ function ChartTypeSelector({config, result, onConfigChange}: ChartTypeSelectorPr
                                 {col}
                             </option>
                         ))}
-                </select>
+                </CompactSelect>
             </div>
 
             <div className="flex items-center gap-1.5">
@@ -173,6 +171,7 @@ interface CellChartProps {
     /** Omit for a read-only chart (report view): the type/column controls are hidden. */
     onConfigChange?: (config: CellChartConfig) => void;
     height?: number;
+    readOnly?: boolean;
 }
 
 interface ChartViewProps {
@@ -453,7 +452,13 @@ function ChartView(props: ChartViewProps) {
     }
 }
 
-export function CellChart({result, config, onConfigChange, height = 250}: CellChartProps) {
+export function CellChart({
+    result,
+    config,
+    onConfigChange,
+    height = 250,
+    readOnly = false,
+}: CellChartProps) {
     const {t} = useTranslation();
     const palette = useChartPalette();
     const animate = !usePrefersReducedMotion();
@@ -466,7 +471,7 @@ export function CellChart({result, config, onConfigChange, height = 250}: CellCh
 
     return (
         <div className="border-t border-default">
-            {onConfigChange && (
+            {!readOnly && onConfigChange && (
                 <ChartTypeSelector
                     config={config}
                     result={result}

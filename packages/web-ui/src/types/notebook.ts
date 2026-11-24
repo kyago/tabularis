@@ -22,6 +22,8 @@ export type ChartType =
 /** Report-view tile width in columns of the 6-column grid (1-6). */
 export const REPORT_GRID_COLUMNS = 6;
 
+export type NotebookViewMode = 'edit' | 'report';
+
 export interface CellChartConfig {
     type: ChartType;
     labelColumn: string;
@@ -45,12 +47,36 @@ export interface RunAllResult {
     succeeded: number;
     failed: number;
     skipped: number;
+    /** Cells not run because a prerequisite they reference is disabled. */
+    blocked: number;
     errors: Array<{cellId: string; cellIndex: number; error: string}>;
+    /** Each blocked cell with the disabled cells it waits on. */
+    blockedCells: Array<{
+        cellId: string;
+        cellIndex: number;
+        disabledCells: Array<{cellId: string; cellIndex: number}>;
+    }>;
 }
+
+/** How a typed parameter's value is validated and written into SQL. */
+export type NotebookParamType = 'text' | 'number' | 'boolean' | 'date' | 'select';
 
 export interface NotebookParam {
     name: string;
+    /**
+     * Raw parameter: the text pasted into the SQL as typed. Typed parameter:
+     * the value as canonical text (`true` / `false`, `YYYY-MM-DD`, a number as
+     * its digits), never a JavaScript number.
+     */
     value: string;
+    /** Absent: raw mode, as every parameter was before types existed. */
+    type?: NotebookParamType;
+    /** Typed only: send NULL instead of the value. */
+    isNull?: boolean;
+    /** Typed only: NULL and an empty text are rejected. */
+    required?: boolean;
+    /** `select` only: the values the parameter can take. */
+    options?: string[];
 }
 
 export interface CellExecutionEntry {
@@ -75,6 +101,7 @@ export interface NotebookCell {
     chartConfig?: CellChartConfig | null; // SQL only: inline chart configuration
     resultHeight?: number; // SQL only: custom result panel height in pixels
     isParallel?: boolean; // SQL only: can run in parallel during Run All
+    isDisabled?: boolean; // SQL only: excluded from every execution path until re-enabled (absent = enabled)
     isCollapsed?: boolean; // Whole cell body hidden when collapsed
     isQueryCollapsed?: boolean; // SQL only: query editor section hidden when collapsed
     isResultCollapsed?: boolean; // SQL only: result grid section hidden when collapsed
@@ -82,8 +109,8 @@ export interface NotebookCell {
     kpiConfig?: CellKpiConfig | null; // SQL only: KPI card configuration
     isKpiVisible?: boolean; // SQL only: KPI section visible (defaults to whether kpiConfig is set)
     isQueryPlanVisible?: boolean; // SQL only: query plan (EXPLAIN) section visible, off by default
+    includeInReport?: boolean; // Whether cell participates in Report view (defaults to true)
     history?: CellExecutionEntry[]; // Last N executions
-    isReportHidden?: boolean; // Omitted from report view (e.g. setup queries)
     reportSpan?: number; // Report-view tile width in grid columns (1-6), defaults to full
     cachedAt?: number; // Runtime only: result restored from the result cache at this time (ms)
     resultQuery?: string; // Runtime only: SQL source that produced `result` (key for the result cache)
@@ -108,6 +135,7 @@ export interface NotebookFile {
         schema?: string;
         chartConfig?: CellChartConfig | null;
         isParallel?: boolean;
+        isDisabled?: boolean;
         isCollapsed?: boolean;
         isQueryCollapsed?: boolean;
         isResultCollapsed?: boolean;
@@ -115,8 +143,9 @@ export interface NotebookFile {
         kpiConfig?: CellKpiConfig | null;
         isKpiVisible?: boolean;
         isQueryPlanVisible?: boolean;
-        isReportHidden?: boolean;
         reportSpan?: number;
+
+        includeInReport?: boolean;
     }>;
     params?: NotebookParam[];
     stopOnError?: boolean;

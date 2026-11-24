@@ -1,23 +1,4 @@
-import {REPORT_GRID_COLUMNS, type NotebookCell} from '@/types/notebook';
-import {canRenderChart} from './notebookChart';
-
-export type ReportTileContent = 'markdown' | 'chart' | 'table' | 'loading' | 'error' | 'empty';
-
-/** Cells shown in report view, in notebook order. */
-export function reportCells(cells: NotebookCell[]): NotebookCell[] {
-    return cells.filter((c) => c.isReportHidden !== true);
-}
-
-/** What a report tile renders for a cell; mirrors the edit view's chart visibility default. */
-export function reportTileContent(cell: NotebookCell): ReportTileContent {
-    if (cell.type === 'markdown') return 'markdown';
-    if (cell.isLoading) return 'loading';
-    if (cell.error) return 'error';
-    if (!cell.result) return 'empty';
-    const chartVisible = cell.isChartVisible ?? !!cell.chartConfig;
-    if (cell.chartConfig && chartVisible && canRenderChart(cell.result)) return 'chart';
-    return 'table';
-}
+import {REPORT_GRID_COLUMNS} from '@/types/notebook';
 
 // Literal class names so Tailwind generates every span.
 const SPANS = [

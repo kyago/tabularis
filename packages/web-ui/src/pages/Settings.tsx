@@ -39,9 +39,12 @@ import {SnippetsTab} from '@/components/settings/SnippetsTab';
 import {PluginSettingsPage} from '@/components/settings/PluginSettingsPage';
 import {useDrivers} from '@/hooks/useDrivers';
 import {useSettings} from '@/hooks/useSettings';
+import {useConnectionCapabilities} from '@/hooks/useConnectionCapabilities';
 import {useAvailableUpdates} from '@/hooks/useAvailableUpdates';
 import {UpdateBadge} from '@/components/ui/UpdateBadge';
 import {UpdateTooltip} from '@/components/ui/UpdateTooltip';
+import {Chip} from '@/components/ui/Chip';
+import type {DeprecationInfo} from '@/types/plugins';
 
 type SettingsTab =
     | 'general'
@@ -89,6 +92,9 @@ const TAB_ITEMS: Array<{
     {id: 'info', icon: Info, labelKey: 'settings.info'},
 ];
 
+/** Tunnel profiles and connection backups choose where connections go and what leaves the server. */
+const MANAGED_HIDDEN_TABS: ReadonlySet<SettingsTab> = new Set(['ssh', 'backup']);
+
 const TAB_COMPONENTS: Partial<Record<SettingsTab, React.ComponentType>> = {
     general: GeneralTab,
     network: NetworkTab,
@@ -113,11 +119,13 @@ export const Settings = () => {
     const [searchParams, setSearchParams] = useSearchParams();
     const {allDrivers, installedPlugins, refresh: refreshDrivers} = useDrivers();
     const {settings} = useSettings();
+    const {managed} = useConnectionCapabilities();
+    const tabItems = TAB_ITEMS.filter(({id}) => !(managed && MANAGED_HIDDEN_TABS.has(id)));
     const activeExternalDrivers =
         settings.activeExternalDrivers ?? installedPlugins.map((p) => p.id);
     const tabParam = searchParams.get('tab');
     const requestedTab: SettingsTab =
-        tabParam && (TAB_ITEMS.some(({id}) => id === tabParam) || tabParam.startsWith('plugin:'))
+        tabParam && (tabItems.some(({id}) => id === tabParam) || tabParam.startsWith('plugin:'))
             ? (tabParam as SettingsTab)
             : 'general';
     const setRequestedTab = (tab: SettingsTab) => {
@@ -153,7 +161,10 @@ export const Settings = () => {
         [refreshDrivers],
     );
 
-    const pluginSettingItems = new Map<string, {id: string; name: string}>();
+    const pluginSettingItems = new Map<
+        string,
+        {id: string; name: string; deprecated?: DeprecationInfo}
+    >();
 
     for (const driver of allDrivers) {
         const hasSettings = (driver.settings?.length ?? 0) > 0;
@@ -162,6 +173,7 @@ export const Settings = () => {
         pluginSettingItems.set(driver.id, {
             id: driver.id,
             name: driver.name,
+            deprecated: driver.deprecated,
         });
     }
 
@@ -205,7 +217,7 @@ export const Settings = () => {
             {/* Sidebar */}
             <nav className="w-52 flex flex-col border-r border-default bg-elevated shrink-0">
                 <div className="flex-1 py-2 px-2 overflow-y-auto space-y-0.5">
-                    {TAB_ITEMS.map(({id, icon: Icon, labelKey}) => (
+                    {tabItems.map(({id, icon: Icon, labelKey}) => (
                         <div key={id} className="space-y-1">
                             <UpdateTooltip
                                 className="flex"
@@ -253,19 +265,44 @@ export const Settings = () => {
                                 <div className="pl-4 space-y-0.5">
                                     {pluginTabs.map((plugin) => {
                                         const pluginTabId = `plugin:${plugin.id}` as const;
+                                        const deprecation = plugin.deprecated;
+                                        const deprecatedTitle = deprecation
+                                            ? deprecation.removal_date
+                                                ? t('settings.plugins.deprecatedTooltipDate', {
+                                                      replacement: deprecation.replacement_id ?? '',
+                                                      date: deprecation.removal_date,
+                                                  })
+                                                : t('settings.plugins.deprecatedTooltip', {
+                                                      replacement: deprecation.replacement_id ?? '',
+                                                  })
+                                            : undefined;
                                         return (
                                             <button
                                                 key={plugin.id}
                                                 onClick={() => setRequestedTab(pluginTabId)}
                                                 className={clsx(
-                                                    'w-full px-3 py-1.5 rounded-lg text-xs text-left transition-colors truncate',
+                                                    'w-full px-3 py-1.5 rounded-lg text-xs text-left transition-colors',
+                                                    deprecation
+                                                        ? 'flex items-center gap-1.5'
+                                                        : 'truncate',
                                                     activeTab === pluginTabId
                                                         ? 'bg-surface-secondary text-primary'
                                                         : 'text-muted hover:text-primary hover:bg-surface-secondary/50',
                                                 )}
-                                                title={plugin.name}
+                                                title={deprecatedTitle ?? plugin.name}
                                             >
-                                                {plugin.name}
+                                                {deprecation ? (
+                                                    <>
+                                                        <span className="truncate">
+                                                            {plugin.name}
+                                                        </span>
+                                                        <Chip tone="warning" size="sm">
+                                                            {t('settings.plugins.deprecated')}
+                                                        </Chip>
+                                                    </>
+                                                ) : (
+                                                    plugin.name
+                                                )}
                                             </button>
                                         );
                                     })}

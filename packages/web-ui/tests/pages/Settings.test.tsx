@@ -1,7 +1,7 @@
 import {StrictMode} from 'react';
 import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {MemoryRouter, Route, Routes, useSearchParams} from 'react-router-dom';
-import {beforeEach, describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {createInstance} from 'i18next';
 import en from '@/i18n/locales/en.json';
 import itLocale from '@/i18n/locales/it.json';
@@ -14,6 +14,8 @@ import {UpdateBadge} from '@/components/ui/UpdateBadge';
 import {usePluginRegistry} from '@/hooks/usePluginRegistry';
 import {useUpdate} from '@/hooks/useUpdate';
 import type {RegistryPluginWithStatus} from '@/types/plugins';
+import {ConnectionCapabilitiesContext} from '@/contexts/ConnectionCapabilitiesContext';
+import {STANDALONE_CONNECTION_CAPABILITIES} from '@/api/session';
 
 const i18n = createInstance();
 await i18n.init({
@@ -32,17 +34,25 @@ vi.mock('@/hooks/useUpdate', () => ({useUpdate: vi.fn()}));
 vi.mock('@/hooks/useSettings', () => ({
     useSettings: () => ({settings: {}, isLoading: false, updateSetting: vi.fn()}),
 }));
+const driversMock = vi.hoisted(() => {
+    const defaultDrivers = [
+        {
+            id: 'mysql',
+            name: 'MySQL',
+            is_builtin: true,
+            settings: [{key: 'pool'}],
+        },
+    ];
+    return {
+        defaultDrivers,
+        allDrivers: defaultDrivers as Array<Record<string, unknown>>,
+        installedPlugins: [] as Array<Record<string, unknown>>,
+    };
+});
 vi.mock('@/hooks/useDrivers', () => ({
     useDrivers: () => ({
-        allDrivers: [
-            {
-                id: 'mysql',
-                name: 'MySQL',
-                is_builtin: true,
-                settings: [{key: 'pool'}],
-            },
-        ],
-        installedPlugins: [],
+        allDrivers: driversMock.allDrivers,
+        installedPlugins: driversMock.installedPlugins,
         refresh: vi.fn(),
     }),
 }));
@@ -124,19 +134,21 @@ function SettingsLink() {
     );
 }
 
-function renderApp(path = '/settings') {
+function renderApp(path = '/settings', capabilities = STANDALONE_CONNECTION_CAPABILITIES) {
     return render(
         <StrictMode>
-            <ToastProvider>
-                <MemoryRouter initialEntries={[path]}>
-                    <PluginUpdateToast />
-                    <SettingsLink />
-                    <Routes>
-                        <Route path="/connections" element={<div>Connections</div>} />
-                        <Route path="/settings" element={<Settings />} />
-                    </Routes>
-                </MemoryRouter>
-            </ToastProvider>
+            <ConnectionCapabilitiesContext.Provider value={capabilities}>
+                <ToastProvider>
+                    <MemoryRouter initialEntries={[path]}>
+                        <PluginUpdateToast />
+                        <SettingsLink />
+                        <Routes>
+                            <Route path="/connections" element={<div>Connections</div>} />
+                            <Route path="/settings" element={<Settings />} />
+                        </Routes>
+                    </MemoryRouter>
+                </ToastProvider>
+            </ConnectionCapabilitiesContext.Provider>
         </StrictMode>,
     );
 }
@@ -318,5 +330,125 @@ describe('update navigation', () => {
                 '1 aggiornamento plugin disponibile',
             ),
         );
+    });
+});
+
+describe('managed connections', () => {
+    const managed = {...STANDALONE_CONNECTION_CAPABILITIES, managed: true};
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(usePluginRegistry).mockReturnValue({
+            plugins: [],
+            updates: [],
+            loading: false,
+            error: null,
+            refresh: vi.fn(),
+        });
+        vi.mocked(useUpdate).mockReturnValue({
+            updateInfo: null,
+            availableUpdate: null,
+            isChecking: false,
+            isDownloading: false,
+            downloadProgress: 0,
+            checkForUpdates: vi.fn(),
+            downloadAndInstall: vi.fn(),
+            dismissUpdate: vi.fn(),
+            error: null,
+            isUpToDate: true,
+            installationSource: null,
+        });
+    });
+
+    it('offers the tunnel and backup tabs outside managed mode', () => {
+        renderApp('/settings');
+
+        expect(screen.getByRole('button', {name: 'Connessioni SSH'})).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: 'Backup'})).toBeInTheDocument();
+    });
+
+    it('hides the tunnel and backup tabs, which would retarget or export connections', () => {
+        renderApp('/settings', managed);
+
+        expect(screen.queryByRole('button', {name: 'Connessioni SSH'})).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: 'Backup'})).not.toBeInTheDocument();
+        expect(screen.getByRole('button', {name: 'MySQL'})).toBeInTheDocument();
+    });
+
+    it('does not open a hidden tab from its URL', () => {
+        renderApp('/settings?tab=ssh', managed);
+
+        expect(screen.queryByText('SshTab')).not.toBeInTheDocument();
+        expect(screen.getByText('GeneralTab')).toBeInTheDocument();
+    });
+
+    it('still opens the tab from its URL outside managed mode', () => {
+        renderApp('/settings?tab=ssh');
+
+        expect(screen.getByText('SshTab')).toBeInTheDocument();
+    });
+});
+
+describe('plugin sidebar with a deprecated built-in driver', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(usePluginRegistry).mockReturnValue({
+            plugins: [],
+            updates: [],
+            loading: false,
+            error: null,
+            refresh: vi.fn(),
+        });
+        vi.mocked(useUpdate).mockReturnValue({
+            updateInfo: null,
+            availableUpdate: null,
+            isChecking: false,
+            isDownloading: false,
+            downloadProgress: 0,
+            checkForUpdates: vi.fn(),
+            downloadAndInstall: vi.fn(),
+            dismissUpdate: vi.fn(),
+            error: null,
+            isUpToDate: true,
+            installationSource: null,
+        });
+        driversMock.allDrivers = [
+            ...driversMock.defaultDrivers,
+            {
+                id: 'postgres',
+                name: 'PostgreSQL',
+                is_builtin: true,
+                settings: [{key: 'pool'}],
+                deprecated: {replacement_id: 'postgresql', removal_date: '2026-10-05'},
+            },
+            {id: 'postgresql', name: 'PostgreSQL', is_builtin: false, settings: []},
+        ];
+        driversMock.installedPlugins = [{id: 'postgresql', name: 'PostgreSQL'}];
+    });
+
+    afterEach(() => {
+        driversMock.allDrivers = driversMock.defaultDrivers;
+        driversMock.installedPlugins = [];
+    });
+
+    it('marks the deprecated built-in entry so it can be told apart from its plugin replacement', () => {
+        renderApp();
+
+        const entries = screen.getAllByRole('button', {name: /^PostgreSQL/});
+        expect(entries).toHaveLength(2);
+        const [builtin, replacement] = entries;
+        expect(builtin).toHaveTextContent('Deprecato');
+        expect(builtin).toHaveAttribute(
+            'title',
+            expect.stringContaining('viene sostituito dal plugin postgresql'),
+        );
+        expect(replacement).toHaveAccessibleName('PostgreSQL');
+        expect(replacement).not.toHaveTextContent('Deprecato');
+    });
+
+    it('leaves non-deprecated entries unchanged', () => {
+        renderApp();
+
+        expect(screen.getByRole('button', {name: 'MySQL'})).not.toHaveTextContent('Deprecato');
     });
 });

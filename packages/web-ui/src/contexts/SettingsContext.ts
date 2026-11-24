@@ -69,6 +69,8 @@ export interface Settings {
     stickyColumnHeaders?: boolean;
     /** Shade every other result grid row for easier scanning. Default: false. */
     resultZebraStripes?: boolean;
+    /** Where the editor's open tabs sit: along the top ("horizontal") or down the left ("vertical"). Default: "horizontal". */
+    tabLayout?: 'horizontal' | 'vertical';
     /** Default sort direction on the first column header click in the data grid: "asc" (default) or "desc". */
     defaultSortDirection?: DefaultSortDirection;
     /** Font used for query result cells. A font name from AVAILABLE_FONTS, a custom family, or RESULT_FONT_INHERIT to follow the interface font. Default: "JetBrains Mono". */
@@ -122,6 +124,8 @@ export interface Settings {
     editorHighlightInvisibleCharacters?: boolean;
     editorShowLineNumbers?: boolean;
     editorAcceptSuggestionOnEnter?: boolean;
+    /** Enable Vim keybindings in SQL editors. Default: false. */
+    editorVimMode?: boolean;
     runStatementUnderCursor?: boolean;
     /** Case of SQL keywords inserted by autocomplete. Default: "match". */
     autocompleteKeywordCase?: AutocompleteKeywordCase;
@@ -253,6 +257,7 @@ export const DEFAULT_SETTINGS: Settings = {
     resultTypeColors: {},
     stickyColumnHeaders: true,
     resultZebraStripes: false,
+    tabLayout: 'horizontal',
     defaultSortDirection: 'asc',
     resultFontFamily: 'JetBrains Mono',
     aiEnabled: false,
@@ -281,6 +286,7 @@ export const DEFAULT_SETTINGS: Settings = {
     editorRenderWhitespace: 'selection',
     editorShowLineNumbers: true,
     editorAcceptSuggestionOnEnter: true,
+    editorVimMode: false,
     runStatementUnderCursor: true,
     autocompleteKeywordCase: 'match',
     sqlDiagnosticsEnabled: false,

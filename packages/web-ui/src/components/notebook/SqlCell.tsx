@@ -20,6 +20,7 @@ interface SqlCellProps {
     onToggleQueryPlanVisible: () => void;
     connectionId: string;
     explainQuery?: ResolvedQuery;
+    explainError?: string;
     schema?: string;
 }
 
@@ -37,6 +38,7 @@ export function SqlCell({
     onToggleQueryPlanVisible,
     connectionId,
     explainQuery,
+    explainError,
     schema,
 }: SqlCellProps) {
     const {t} = useTranslation();
@@ -53,6 +55,17 @@ export function SqlCell({
                 collapsed={cell.isQueryCollapsed}
                 onToggleCollapse={onToggleQueryCollapse}
             />
+            {cell.isDisabled && (
+                <p
+                    role="status"
+                    className="px-3 py-1.5 border-t border-default bg-accent-warning/5 text-[11px] text-secondary"
+                >
+                    {t('editor.notebook.disabledNotice')}
+                    {(cell.result || cell.error) && (
+                        <> {t('editor.notebook.disabledOutputNotice')}</>
+                    )}
+                </p>
+            )}
             <SqlCellResult
                 result={cell.result ?? null}
                 error={cell.error}
@@ -75,15 +88,17 @@ export function SqlCell({
             <SqlCellExplain
                 query={explainQuery?.sql ?? cell.content}
                 queryError={
-                    unresolvedRefs.length > 0
+                    explainError ??
+                    (unresolvedRefs.length > 0
                         ? t('editor.notebook.queryPlanUnresolved', {
                               refs: [...new Set(unresolvedRefs.map((ref) => ref.match))].join(', '),
                           })
-                        : undefined
+                        : undefined)
                 }
                 connectionId={connectionId}
                 schema={schema}
-                visible={!!cell.isQueryPlanVisible}
+                // A disabled cell sends nothing to the database, EXPLAIN included.
+                visible={!!cell.isQueryPlanVisible && !cell.isDisabled}
                 onToggleVisible={onToggleQueryPlanVisible}
             />
         </div>

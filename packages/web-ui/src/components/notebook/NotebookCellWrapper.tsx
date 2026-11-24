@@ -5,6 +5,7 @@ import {useDatabase} from '@/hooks/useDatabase';
 import {supportsExplain} from '@/utils/driverCapabilities';
 import type {ResolvedQuery} from '@/utils/notebookVariables';
 import {restoreFromHistory, getHistorySize} from '@/utils/notebookHistory';
+import {isCellIncludedInReport} from '@/utils/notebook';
 import {NotebookCellHeader} from './NotebookCellHeader';
 import {SqlCell} from './SqlCell';
 import {MarkdownCell} from './MarkdownCell';
@@ -23,6 +24,8 @@ interface NotebookCellWrapperProps {
     canDuplicate?: boolean;
     connectionId: string;
     explainQuery?: ResolvedQuery;
+    /** Why the query plan cannot be requested, such as a parameter that cannot be sent. */
+    explainError?: string;
     activeSchema?: string;
     selectedDatabases?: string[];
     onSchemaChange?: (schema: string) => void;
@@ -47,6 +50,7 @@ export function NotebookCellWrapper({
     canDuplicate,
     connectionId,
     explainQuery,
+    explainError,
     activeSchema,
     selectedDatabases,
     onSchemaChange,
@@ -104,6 +108,12 @@ export function NotebookCellWrapper({
                 onToggleParallel={
                     cell.type === 'sql' ? () => onUpdate({isParallel: !cell.isParallel}) : undefined
                 }
+                isDisabled={cell.type === 'sql' && !!cell.isDisabled}
+                onToggleDisabled={
+                    cell.type === 'sql'
+                        ? () => onUpdate({isDisabled: cell.isDisabled ? undefined : true})
+                        : undefined
+                }
                 historyCount={cell.type === 'sql' ? getHistorySize(cell) : undefined}
                 onToggleHistory={cell.type === 'sql' ? () => setShowHistory((v) => !v) : undefined}
                 isQueryPlanVisible={cell.isQueryPlanVisible}
@@ -118,8 +128,10 @@ export function NotebookCellWrapper({
                 cellName={cell.name}
                 onNameChange={(name) => onUpdate({name: name || undefined})}
                 cellContent={cell.content}
-                isReportHidden={cell.isReportHidden}
-                onToggleReportHidden={() => onUpdate({isReportHidden: !cell.isReportHidden})}
+                includeInReport={isCellIncludedInReport(cell)}
+                onToggleIncludeInReport={() =>
+                    onUpdate({includeInReport: !isCellIncludedInReport(cell)})
+                }
             />
 
             {showHistory && cell.type === 'sql' && (
@@ -149,6 +161,7 @@ export function NotebookCellWrapper({
                     onToggleQueryPlanVisible={toggleQueryPlan}
                     connectionId={connectionId}
                     explainQuery={explainQuery}
+                    explainError={explainError}
                     schema={activeSchema}
                 />
             ) : !cell.isCollapsed ? (

@@ -1,6 +1,6 @@
 import {describe, it, expect} from 'vitest';
 import {serializeNotebook, deserializeNotebook, validateNotebookFile} from '@/utils/notebookFile';
-import type {NotebookCell} from '@/types/notebook';
+import type {NotebookCell, NotebookParam} from '@/types/notebook';
 
 function makeCells(): NotebookCell[] {
     return [
@@ -445,6 +445,31 @@ describe('notebookFile utils', () => {
             expect(result.cells[0].schema).toBe('production_db');
         });
 
+        it('should persist includeInReport when false and default existing cells to included', () => {
+            const cells = makeCells();
+            cells[0].includeInReport = false;
+            cells[1].includeInReport = true;
+
+            const serialized = serializeNotebook('Report', cells);
+            expect(serialized.cells[0].includeInReport).toBe(false);
+            expect(serialized.cells[1]).not.toHaveProperty('includeInReport');
+
+            const restored = deserializeNotebook(JSON.stringify(serialized));
+            expect(restored.cells[0].includeInReport).toBe(false);
+            expect(restored.cells[1].includeInReport).toBeUndefined();
+
+            // Legacy cells without includeInReport default to included
+            const legacy = deserializeNotebook(
+                JSON.stringify({
+                    version: 1,
+                    title: 'Legacy',
+                    createdAt: '2025-01-01',
+                    cells: [{type: 'sql', content: 'SELECT 1'}],
+                }),
+            );
+            expect(legacy.cells[0].includeInReport).toBeUndefined();
+        });
+
         it('should handle notebook without params', () => {
             const serialized = serializeNotebook('Bare', makeCells());
             const json = JSON.stringify(serialized);
@@ -485,18 +510,34 @@ describe('notebookFile utils', () => {
     describe('report view fields', () => {
         it('round-trips report inclusion and span', () => {
             const cells = makeCells();
-            cells[0] = {...cells[0], isReportHidden: true, reportSpan: 4};
+            cells[0] = {...cells[0], includeInReport: false, reportSpan: 4};
             const file = serializeNotebook('T', cells);
-            expect(file.cells[0]).toMatchObject({isReportHidden: true, reportSpan: 4});
+            expect(file.cells[0]).toMatchObject({includeInReport: false, reportSpan: 4});
             const back = deserializeNotebook(JSON.stringify(file));
-            expect(back.cells[0].isReportHidden).toBe(true);
+            expect(back.cells[0].includeInReport).toBe(false);
             expect(back.cells[0].reportSpan).toBe(4);
         });
 
         it('omits report fields when unset', () => {
             const file = serializeNotebook('T', makeCells());
-            expect(file.cells[1]).not.toHaveProperty('isReportHidden');
+            expect(file.cells[1]).not.toHaveProperty('includeInReport');
             expect(file.cells[1]).not.toHaveProperty('reportSpan');
+        });
+
+        it('reads the earlier isReportHidden flag as excluded from the report', () => {
+            const json = JSON.stringify({
+                version: 2,
+                title: 'T',
+                createdAt: '',
+                cells: [
+                    {type: 'sql', content: 'SELECT 1', isReportHidden: true},
+                    {type: 'sql', content: 'SELECT 2', isReportHidden: true, includeInReport: true},
+                ],
+            });
+            const back = deserializeNotebook(json);
+            expect(back.cells[0].includeInReport).toBe(false);
+            // An explicit includeInReport wins over the old flag.
+            expect(back.cells[1].includeInReport).toBe(true);
         });
 
         it.each([
@@ -532,7 +573,7 @@ describe('notebookFile utils', () => {
                 });
                 const back = deserializeNotebook(json);
                 expect(back.cells[0].reportSpan).toBeUndefined();
-                expect(back.cells[0].isReportHidden).toBeUndefined();
+                expect(back.cells[0].includeInReport).toBeUndefined();
             },
         );
     });
@@ -612,5 +653,150 @@ describe('notebookFile utils', () => {
             expect(restored.cells[0].isKpiVisible).toBeUndefined();
             expect(restored.cells[1].kpiConfig).toEqual({column: 'n', decimals: 0});
         });
+    });
+});
+
+describe('notebookFile disabled SQL cells', () => {
+    it('keeps the disabled flag through serialize and deserialize', () => {
+        const cells: NotebookCell[] = [
+            {id: 'a', type: 'sql', content: 'SELECT 1', isDisabled: true, isParallel: true},
+            {id: 'b', type: 'sql', content: 'SELECT 2'},
+        ];
+        const file = serializeNotebook('Disabled', cells);
+        expect(file.cells[0].isDisabled).toBe(true);
+        expect(file.cells[1]).not.toHaveProperty('isDisabled');
+        const restored = deserializeNotebook(JSON.stringify(file));
+        expect(restored.cells[0]).toMatchObject({
+            content: 'SELECT 1',
+            isDisabled: true,
+            isParallel: true,
+        });
+        expect(restored.cells[1].isDisabled).toBeUndefined();
+    });
+
+    it('does not write an enabled flag, so enabled cells stay byte-compatible', () => {
+        const file = serializeNotebook('x', [
+            {id: 'a', type: 'sql', content: 'SELECT 1', isDisabled: false},
+        ]);
+        expect(file.cells[0]).not.toHaveProperty('isDisabled');
+    });
+
+    it('loads legacy files without the flag as enabled', () => {
+        const restored = deserializeNotebook(
+            JSON.stringify({
+                version: 1,
+                title: 'Old',
+                createdAt: '2024-01-01',
+                cells: [{type: 'sql', content: 'SELECT 1'}],
+            }),
+        );
+        expect(restored.cells[0].isDisabled).toBeUndefined();
+    });
+
+    it.each([['true'], [1], [null], [{}]])(
+        'ignores a malformed disabled value %j from an untrusted file',
+        (value) => {
+            const restored = deserializeNotebook(
+                JSON.stringify({
+                    version: 2,
+                    title: 'x',
+                    createdAt: '2024-01-01',
+                    cells: [{type: 'sql', content: 'SELECT 1', isDisabled: value}],
+                }),
+            );
+            expect(restored.cells[0].isDisabled).toBeUndefined();
+        },
+    );
+
+    it('never marks a Markdown cell disabled', () => {
+        const file = serializeNotebook('x', [
+            {id: 'a', type: 'markdown', content: '# x', isDisabled: true},
+        ]);
+        expect(file.cells[0]).not.toHaveProperty('isDisabled');
+        const restored = deserializeNotebook(
+            JSON.stringify({
+                version: 2,
+                title: 'x',
+                createdAt: '2024-01-01',
+                cells: [{type: 'markdown', content: '# x', isDisabled: true}],
+            }),
+        );
+        expect(restored.cells[0].isDisabled).toBeUndefined();
+    });
+});
+
+describe('notebookFile typed parameters', () => {
+    const typedParams: NotebookParam[] = [
+        {name: 'start', value: '2026-01-01', type: 'date', required: true},
+        {name: 'country', value: 'Brazil', type: 'select', options: ['Brazil', 'Ireland']},
+        {name: 'limit', value: '12345678901234567890.10', type: 'number'},
+        {name: 'active', value: 'false', type: 'boolean'},
+        {name: 'note', value: '', type: 'text', isNull: true},
+        {name: 'tbl', value: 'orders'},
+    ];
+    const load = (params: unknown) =>
+        deserializeNotebook(
+            JSON.stringify({version: 2, title: 'x', createdAt: '2026-01-01', cells: [], params}),
+        ).params;
+
+    it('keeps type, configuration and applied value through serialize and deserialize', () => {
+        const file = serializeNotebook('Report', [], typedParams);
+        expect(file.params).toEqual(typedParams);
+        expect(deserializeNotebook(JSON.stringify(file)).params).toEqual(typedParams);
+    });
+
+    it('does not bump the file version for typed parameters', () => {
+        expect(serializeNotebook('Report', [], typedParams).version).toBe(2);
+    });
+
+    it('loads a legacy parameter without a type as raw, as found', () => {
+        expect(load([{name: 'start', value: "'2026-01-01'"}])).toEqual([
+            {name: 'start', value: "'2026-01-01'"},
+        ]);
+    });
+
+    it('stores a typed parameter in normalized form', () => {
+        expect(
+            load([
+                {name: 'n', value: ' 42 ', type: 'number', isNull: false, required: false},
+                {name: 'c', value: 'a', type: 'select', options: [' a ', '', 'b', 'a']},
+                {name: 't', value: 'x', type: 'text', options: ['ignored']},
+            ]),
+        ).toEqual([
+            {name: 'n', value: '42', type: 'number'},
+            {name: 'c', value: 'a', type: 'select', options: ['a', 'b']},
+            {name: 't', value: 'x', type: 'text'},
+        ]);
+    });
+
+    it('drops a typed parameter that is structurally malformed', () => {
+        expect(
+            load([
+                {name: 'a', value: '1', type: 'integer'},
+                {name: 'b', value: '1', type: null},
+                {name: 'c', value: '1', type: 'number', isNull: 'yes'},
+                {name: 'd', value: '1', type: 'number', required: 1},
+                {name: 'e', value: 'x', type: 'select', options: 'x'},
+                {name: 'f', value: 'x', type: 'select', options: ['x', 1]},
+                {name: 'g', value: 1, type: 'number'},
+                {name: 'ok', value: '1', type: 'number'},
+            ]),
+        ).toEqual([{name: 'ok', value: '1', type: 'number'}]);
+    });
+
+    it('keeps a well-formed typed parameter whose value is invalid', () => {
+        expect(
+            load([
+                {name: 'since', value: '2025-02-29', type: 'date'},
+                {name: 'n', value: '1e3', type: 'number'},
+                {name: 'c', value: 'gone', type: 'select', options: ['a']},
+                {name: 'empty', value: 'x', type: 'select'},
+            ]),
+        ).toEqual([
+            {name: 'since', value: '2025-02-29', type: 'date'},
+            {name: 'n', value: '1e3', type: 'number'},
+            {name: 'c', value: 'gone', type: 'select', options: ['a']},
+            {name: 'empty', value: 'x', type: 'select', options: []},
+        ]);
     });
 });

@@ -1157,7 +1157,8 @@ async fn exec_on_pg_client(
 
     let (final_query, pagination_meta) = if is_select && limit.is_some() {
         let l = limit.unwrap();
-        let data_query = crate::drivers::common::build_paginated_query(query, l, page);
+        let data_query =
+            crate::drivers::common::build_paginated_query_for(query, l, page, false, false);
         manual_limit = None;
         (data_query, Some((l, page)))
     } else {
@@ -2357,6 +2358,7 @@ impl PostgresDriver {
                     triggers: true,
                     supports_ssl: true,
                     user_management: false,
+                    unix_socket: true,
                     sql_dialect: Some(SqlDialect::Postgres),
                     sql_syntax: None,
                 },

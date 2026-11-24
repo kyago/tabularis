@@ -199,6 +199,149 @@ describe('columnUsage', () => {
             expect(summary(correlated, ordersNoSchema, {columnsOf: owned})).toEqual([]);
         });
 
+        it('reads ORDER BY and LIMIT after the last set-operation side as the combined result', () => {
+            const archive: ColumnUsageTarget = {
+                schema: 'public',
+                table: 'archive',
+                column: 'customer_id',
+            };
+            const union =
+                'SELECT customer_id FROM public.orders UNION SELECT customer_id FROM public.archive';
+            // Only the select list of the archive side reads the column.
+            expect(summary(`${union} ORDER BY customer_id`, archive)).toEqual(['parsed']);
+            const ids = 'SELECT id FROM public.orders UNION SELECT id FROM public.archive';
+            for (const tail of [
+                'ORDER BY customer_id',
+                'ORDER BY customer_id LIMIT 5',
+                'ORDER BY customer_id DESC OFFSET 2 ROWS FETCH NEXT 5 ROWS ONLY',
+            ]) {
+                expect(summary(`${ids} ${tail}`, archive)).toEqual([]);
+            }
+            // Parenthesised sides, MySQL style, and a union inside a subquery.
+            expect(
+                summary(
+                    'SELECT id FROM public.orders UNION ALL (SELECT id FROM public.archive) ORDER BY customer_id',
+                    archive,
+                ),
+            ).toEqual([]);
+            expect(
+                summary(`SELECT x FROM t WHERE id IN (${ids} ORDER BY customer_id)`, archive),
+            ).toEqual([]);
+            // An ORDER BY inside one parenthesised side still reads that side's table.
+            expect(
+                summary(
+                    'SELECT id FROM public.orders UNION (SELECT id FROM public.archive ORDER BY customer_id)',
+                    archive,
+                ),
+            ).toEqual(['parsed']);
+            // Without a set operation, ORDER BY reads the query's own tables.
+            expect(
+                summary('SELECT id FROM public.orders ORDER BY customer_id', ordersPublic),
+            ).toEqual(['parsed']);
+            expect(
+                summary(
+                    'SELECT id FROM public.orders WHERE id IN (SELECT 1 UNION SELECT 2) ORDER BY customer_id',
+                    ordersPublic,
+                ),
+            ).toEqual(['parsed']);
+            // A window or aggregate ORDER BY inside a side stays with that side.
+            expect(
+                summary(
+                    'SELECT id FROM public.orders UNION SELECT row_number() OVER (ORDER BY customer_id) FROM public.archive',
+                    archive,
+                ),
+            ).toEqual(['parsed']);
+        });
+
+        it('splits only where a query follows UNION, INTERSECT, EXCEPT or MINUS', () => {
+            // `minus` is an ordinary name outside Oracle.
+            for (const dialect of ['postgres', 'mysql', 'sqlite']) {
+                expect(
+                    summary('SELECT customer_id, minus FROM public.orders', ordersPublic, {
+                        dialect,
+                    }),
+                ).toEqual(['parsed']);
+            }
+            expect(
+                summary('SELECT minus.customer_id FROM public.orders minus', ordersPublic),
+            ).toEqual(['parsed']);
+            // BigQuery / ClickHouse / Databricks `* EXCEPT (...)` select lists.
+            const except = 'SELECT customer_id, * EXCEPT (secret) FROM public.orders';
+            expect(summary(except, ordersPublic, {dialect: 'generic'})).toEqual([
+                'parsed',
+                'uncertain:wildcard',
+            ]);
+            expect(
+                summary('SELECT * EXCEPT (secret) FROM public.orders', ordersPublic, {
+                    dialect: 'generic',
+                }),
+            ).toEqual(['uncertain:wildcard']);
+            expect(
+                summary('SELECT * EXCEPT secret FROM public.orders', ordersPublic, {
+                    dialect: 'generic',
+                }),
+            ).toEqual(['uncertain:wildcard']);
+            // What may follow a real set operator still splits.
+            const archive = 'SELECT customer_id FROM public.orders';
+            for (const rest of [
+                'UNION DISTINCT SELECT customer_id FROM public.archive',
+                'EXCEPT ALL SELECT customer_id FROM public.archive',
+                'UNION (SELECT customer_id FROM public.archive)',
+                'UNION ((SELECT customer_id FROM public.archive))',
+                'UNION WITH a AS (SELECT 1) SELECT customer_id FROM public.archive',
+            ]) {
+                expect(summary(`${archive} ${rest}`, ordersPublic)).toEqual(['parsed']);
+            }
+        });
+
+        it('checks each side of UNION, INTERSECT and EXCEPT against its own tables', () => {
+            const union =
+                'SELECT customer_id FROM public.orders UNION SELECT customer_id FROM public.archive';
+            expect(summary(union, ordersPublic)).toEqual(['parsed']);
+            expect(summary(union.replace('UNION', 'UNION ALL'), ordersPublic)).toEqual(['parsed']);
+            expect(summary(union.replace('UNION', 'INTERSECT'), ordersPublic)).toEqual(['parsed']);
+            expect(summary(union.replace('UNION', 'EXCEPT'), ordersPublic)).toEqual(['parsed']);
+            const reversed =
+                'SELECT customer_id FROM public.archive UNION SELECT customer_id FROM public.orders';
+            expect(summary(reversed, ordersPublic)).toEqual(['parsed']);
+            const both =
+                'SELECT customer_id FROM public.orders UNION SELECT customer_id FROM public.orders o';
+            expect(summary(both, ordersPublic)).toEqual(['parsed', 'parsed']);
+            // A join inside one side still makes that side ambiguous.
+            const joined =
+                'SELECT customer_id FROM public.orders, public.refunds UNION SELECT customer_id FROM public.archive';
+            expect(summary(joined, ordersPublic)).toEqual(['uncertain:several-tables']);
+            // Inside a subquery and inside a derived table, with or without
+            // parentheses around each side; `d.customer_id` stays a derived-table read.
+            const nested =
+                'SELECT name FROM customers WHERE id IN (SELECT customer_id FROM public.orders UNION SELECT customer_id FROM public.archive)';
+            expect(summary(nested, ordersPublic)).toEqual(['parsed']);
+            const derived =
+                'SELECT d.customer_id FROM (SELECT customer_id FROM public.orders UNION SELECT customer_id FROM public.archive) d';
+            expect(summary(derived, ordersPublic)).toEqual(['uncertain:derived-table', 'parsed']);
+            const wrapped =
+                'SELECT d.customer_id FROM ((SELECT customer_id FROM public.orders) UNION (SELECT customer_id FROM public.archive)) d';
+            expect(summary(wrapped, ordersPublic)).toEqual(['uncertain:derived-table', 'parsed']);
+            // A join group in parentheses is still read as one.
+            const group =
+                'SELECT o.customer_id FROM ((public.orders o JOIN public.archive a ON a.id = o.id))';
+            expect(summary(group, ordersPublic)).toEqual(['parsed']);
+            // A correlated reference from the second side still reaches the outer query.
+            const correlated =
+                'SELECT id FROM public.orders o WHERE EXISTS (SELECT 1 FROM public.archive UNION SELECT 1 FROM public.refunds r WHERE r.cid = customer_id)';
+            const refunds = (ref: RelationRef) =>
+                ref.name === 'refunds' || ref.name === 'archive' ? ['id', 'cid'] : undefined;
+            expect(summary(correlated, ordersPublic, {columnsOf: refunds})).toEqual(['parsed']);
+            // Oracle's MINUS splits the same way.
+            expect(
+                findColumnReferences(
+                    'SELECT customer_id FROM shop.orders MINUS SELECT customer_id FROM shop.archive',
+                    {schema: 'SHOP', table: 'ORDERS', column: 'CUSTOMER_ID'},
+                    {dialect: 'oracle'},
+                ).map((m) => m.confidence),
+            ).toEqual(['parsed']);
+        });
+
         it('analyses every statement of a script on its own', () => {
             const sql = 'SELECT customer_id FROM orders; SELECT customer_id FROM customers;';
             expect(summary(sql, ordersNoSchema)).toEqual(['parsed']);

@@ -5,6 +5,7 @@ import {
     chooseNotebookImport,
     downloadNotebook,
     downloadNotebookHtml,
+    downloadNotebookMarkdown,
     downloadNotebookSql,
 } from '@/utils/notebookTransfer';
 
@@ -102,6 +103,34 @@ describe('notebookTransfer', () => {
         });
     });
 
+    it('carries typed parameters through export and import', async () => {
+        const typed: NotebookState = {
+            cells: [{id: 'q', type: 'sql', content: 'SELECT @start, @country, @tbl'}],
+            params: [
+                {name: 'start', value: '2026-01-01', type: 'date', required: true},
+                {
+                    name: 'country',
+                    value: "Côte d'Ivoire",
+                    type: 'select',
+                    options: ["Côte d'Ivoire"],
+                },
+                {name: 'limit', value: '', type: 'number', isNull: true},
+                {name: 'tbl', value: 'orders'},
+            ],
+        };
+        const downloadFile = vi.fn().mockResolvedValue(true);
+        await downloadNotebook(platformFixture({downloadFile}), 'Typed', typed);
+        const exported: Uint8Array = downloadFile.mock.calls[0][0].contents;
+        expect(JSON.parse(new TextDecoder().decode(exported)).params).toEqual(typed.params);
+
+        const chooseInputFile = vi.fn().mockResolvedValue({name: 'typed', reference: 'ref'});
+        const readInputFile = vi.fn().mockResolvedValue(exported);
+        const imported = await chooseNotebookImport(
+            platformFixture({chooseInputFile, readInputFile}),
+        );
+        expect(imported?.state.params).toEqual(typed.params);
+    });
+
     it('preserves HTML export through the same browser-safe download adapter', async () => {
         const downloadFile = vi.fn().mockResolvedValue(true);
 
@@ -160,5 +189,52 @@ describe('notebookTransfer', () => {
         await downloadNotebookSql(platformFixture({downloadFile}), '', state);
 
         expect(downloadFile.mock.calls[0][0].fileName).toBe('Notebook.sql');
+    });
+
+    it('exports Markdown and SQL cell source through the platform download adapter', async () => {
+        const downloadFile = vi.fn().mockResolvedValue(true);
+
+        await expect(
+            downloadNotebookMarkdown(platformFixture({downloadFile}), 'Revenue / été', state),
+        ).resolves.toBe('downloaded');
+
+        const request = downloadFile.mock.calls[0][0];
+        expect(request.fileName).toBe('Revenue____t_.md');
+        expect(request.mimeType).toBe('text/markdown;charset=utf-8');
+        expect(request.filters).toEqual([{name: 'Markdown', extensions: ['md']}]);
+        const markdown = new TextDecoder('utf-8', {fatal: true}).decode(request.contents);
+        expect(markdown).toBe('```sql\nSELECT 42 AS answer\n```\n\n# Results\n');
+        expect(markdown).not.toContain('eu');
+    });
+
+    it('reports a cancelled Markdown save dialog', async () => {
+        const downloadFile = vi.fn().mockResolvedValue(false);
+
+        await expect(
+            downloadNotebookMarkdown(platformFixture({downloadFile}), 'Revenue', state),
+        ).resolves.toBe('cancelled');
+        expect(downloadFile).toHaveBeenCalledOnce();
+    });
+
+    it('does not open a save dialog when there is no Markdown source to export', async () => {
+        const downloadFile = vi.fn().mockResolvedValue(true);
+
+        await expect(
+            downloadNotebookMarkdown(platformFixture({downloadFile}), 'Notes', {
+                cells: [
+                    {id: 'md', type: 'markdown', content: '  '},
+                    {id: 'sql', type: 'sql', content: ''},
+                ],
+            }),
+        ).resolves.toBe('empty');
+        expect(downloadFile).not.toHaveBeenCalled();
+    });
+
+    it('propagates a failed Markdown write to the caller', async () => {
+        const downloadFile = vi.fn().mockRejectedValue(new Error('disk full'));
+
+        await expect(
+            downloadNotebookMarkdown(platformFixture({downloadFile}), 'Revenue', state),
+        ).rejects.toThrow('disk full');
     });
 });

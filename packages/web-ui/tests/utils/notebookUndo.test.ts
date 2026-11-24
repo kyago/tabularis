@@ -153,6 +153,42 @@ describe('notebookUndo', () => {
             expect(redone.history.future).toHaveLength(0);
         });
 
+        it('undoes and redoes applied parameters as one step', () => {
+            const before = state('a', {
+                params: [
+                    {name: 'start', value: '2026-01-01', type: 'date'},
+                    {
+                        name: 'country',
+                        value: 'Brazil',
+                        type: 'select',
+                        options: ['Brazil', 'Chile'],
+                    },
+                ],
+            });
+            // One Apply commits every drafted row in a single change.
+            const after = state('a', {
+                params: [
+                    {name: 'start', value: '2026-02-01', type: 'date'},
+                    {name: 'country', value: 'Chile', type: 'select', options: ['Brazil', 'Chile']},
+                ],
+            });
+            const h = recordEdit(createHistory(), before, after, 1000);
+            expect(h.past).toHaveLength(1);
+            expect(describeChange(before, after)).toMatchObject({kind: 'params'});
+
+            const undone = undo(h, after)!;
+            expect(undone.state.params).toEqual(before.params);
+            const redone = redo(undone.history, undone.state)!;
+            expect(redone.state.params).toEqual(after.params);
+        });
+
+        it('records a change of parameter type alone', () => {
+            const raw = state('a', {params: [{name: 'p', value: '1'}]});
+            const typed = state('a', {params: [{name: 'p', value: '1', type: 'number'}]});
+            expect(documentSignature(raw)).not.toBe(documentSignature(typed));
+            expect(recordEdit(createHistory(), raw, typed, 1000).past).toEqual([raw]);
+        });
+
         it('walks back through multiple steps', () => {
             let h = createHistory();
             h = recordEdit(h, state('a'), state('b'), 1000);
@@ -306,5 +342,51 @@ describe('notebookUndo', () => {
                 describeChange(ns([cell('a')]), ns([cell('a')], {stopOnError: true} as never)),
             ).toMatchObject({kind: 'stopOnError'});
         });
+        it('tracks includeInReport changes in undo/redo and describeChange', () => {
+            const c1 = {...cell('c1'), includeInReport: undefined};
+            const s1: NotebookState = {cells: [c1]};
+            const s2: NotebookState = {cells: [{...c1, includeInReport: false}]};
+            const s3: NotebookState = {cells: [{...c1, includeInReport: true}]};
+
+            expect(documentSignature(s1)).not.toBe(documentSignature(s2));
+            // undefined and true both mean included
+            expect(documentSignature(s1)).toBe(documentSignature(s3));
+
+            expect(describeChange(s1, s2)).toEqual({kind: 'reportInclusion', n: 1});
+
+            const h = recordEdit(createHistory(), s1, s2, 1000);
+            expect(h.past).toHaveLength(1);
+            const undone = undo(h, s2);
+            expect(undone?.state.cells[0].includeInReport).toBeUndefined();
+            const redone = redo(undone!.history, undone!.state);
+            expect(redone?.state.cells[0].includeInReport).toBe(false);
+        });
+    });
+});
+
+describe('notebookUndo disabled cells', () => {
+    const on: NotebookState = {cells: [{id: 'c1', type: 'sql', content: 'SELECT 1'}]};
+    const off: NotebookState = {
+        cells: [{id: 'c1', type: 'sql', content: 'SELECT 1', isDisabled: true}],
+    };
+
+    it('makes disabling a document change and treats a missing flag as enabled', () => {
+        expect(documentSignature(on)).not.toBe(documentSignature(off));
+        expect(documentSignature(on)).toBe(
+            documentSignature({cells: [{...on.cells[0], isDisabled: false}]}),
+        );
+    });
+
+    it('describes disabling and enabling a cell', () => {
+        expect(describeChange(on, off)).toEqual({kind: 'disableCell', n: 1});
+        expect(describeChange(off, on)).toEqual({kind: 'enableCell', n: 1});
+    });
+
+    it('undoes and redoes a disable', () => {
+        const history = recordEdit(createHistory(), on, off, 10_000);
+        const back = undo(history, off);
+        expect(back?.state.cells[0].isDisabled).toBeUndefined();
+        const forward = back && redo(back.history, back.state);
+        expect(forward?.state.cells[0].isDisabled).toBe(true);
     });
 });
