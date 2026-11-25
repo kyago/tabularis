@@ -541,6 +541,9 @@ pub struct TableInfo {
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub comment: Option<String>,
+    /// Total on-disk bytes (data + indexes), when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size_bytes: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

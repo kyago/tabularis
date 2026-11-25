@@ -33,6 +33,12 @@ vi.mock('@/components/ui/Modal', () => ({
         isOpen ? <div>{children}</div> : null,
 }));
 
+vi.mock('@/components/ui/CellDiffEditor', () => ({
+    CellDiffEditor: ({original, modified}: {original: string; modified: string}) => (
+        <div data-testid="diff">{`${original} -> ${modified}`}</div>
+    ),
+}));
+
 describe('AiQueryModal', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -118,6 +124,34 @@ describe('AiQueryModal', () => {
             });
         });
         expect(onInsert).toHaveBeenCalledWith('SELECT 1');
+    });
+
+    it('shows a fix as a diff and only inserts it once accepted', async () => {
+        invokeMock.mockImplementation((command: string) =>
+            Promise.resolve(command === 'generate_ai_query' ? 'SELECT 1' : ''),
+        );
+        const onInsert = vi.fn();
+        const onClose = vi.fn();
+
+        render(
+            <AiQueryModal
+                isOpen
+                onClose={onClose}
+                onInsert={onInsert}
+                initialPrompt="Fix this query"
+                originalSql="SELEC 1"
+            />,
+        );
+        await waitFor(() => expect(screen.queryByText(/Reading database schema/i)).toBeNull());
+        fireEvent.click(screen.getByRole('button', {name: /Generate SQL/i}));
+
+        expect((await screen.findByTestId('diff')).textContent).toBe('SELEC 1 -> SELECT 1');
+        expect(onInsert).not.toHaveBeenCalled();
+        expect(onClose).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole('button', {name: 'Accept'}));
+        expect(onInsert).toHaveBeenCalledWith('SELECT 1');
+        expect(onClose).toHaveBeenCalled();
     });
 
     it('clears a cancelled fix prompt when reopened for ordinary Generate, keeping ordinary drafts', () => {

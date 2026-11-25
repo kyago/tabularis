@@ -13,7 +13,7 @@ import type {DriverCapabilities} from '@/types/plugins';
 
 /** Subset of the table item props that actually affect its rendered output. */
 export interface TableItemComparableProps {
-    table: {name: string};
+    table: {name: string; size_bytes?: number | null};
     activeTable: string | null;
     connectionId: string;
     driver: string;
@@ -52,6 +52,7 @@ export function areTableItemPropsEqual(
     const isActive = next.activeTable === next.table.name;
     return (
         prev.table.name === next.table.name &&
+        prev.table.size_bytes === next.table.size_bytes &&
         wasActive === isActive &&
         prev.connectionId === next.connectionId &&
         prev.driver === next.driver &&

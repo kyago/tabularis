@@ -114,6 +114,7 @@ pub async fn get_tables(params: &ConnectionParams, schema: &str) -> Result<Vec<T
         .map(|r| TableInfo {
             name: r.try_get("name").unwrap_or_default(),
             comment: r.try_get("comment").ok(),
+            size_bytes: None,
         })
         .collect();
     log::debug!(

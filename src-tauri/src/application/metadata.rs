@@ -1,4 +1,4 @@
-use crate::drivers::driver_trait::DatabaseDriver;
+use crate::drivers::driver_trait::{DatabaseDriver, SqlDialect};
 use crate::models::{
     ConnectionParams, ForeignKey, Index, RoutineInfo, TableColumn, TableInfo, TableSchema,
     TriggerInfo, ViewInfo,
@@ -6,7 +6,9 @@ use crate::models::{
 use crate::runtime::RuntimeContext;
 use serde::Serialize;
 use serde_json::Value;
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 use uuid::Uuid;
 
 #[derive(Debug)]
@@ -420,7 +422,87 @@ pub async fn get_tables(
 ) -> Result<Vec<TableInfo>, String> {
     let (driver, params) = driver_and_params(runtime, session_id, connection_id, database).await?;
 
-    driver.get_tables(&params, schema.as_deref()).await
+    let (tables, sizes) = tokio::join!(
+        driver.get_tables(&params, schema.as_deref()),
+        table_sizes(driver.as_ref(), &params, schema.as_deref()),
+    );
+    let mut tables = tables?;
+    for table in &mut tables {
+        // A size the driver reported itself wins over the host's catalog lookup.
+        if table.size_bytes.is_none() {
+            table.size_bytes = sizes.get(&table.name).copied();
+        }
+    }
+    Ok(tables)
+}
+
+/// Catalog query returning `(table name, total bytes)` rows for one schema, or
+/// `None` when the dialect has no cheap bulk size lookup.
+fn table_sizes_sql(dialect: SqlDialect, schema: &str) -> Option<String> {
+    // shortcut: the schema is inlined as a literal because `execute_query` takes
+    // no bind parameters, so names with quotes or backslashes get no sizes;
+    // upgrade if drivers gain a parameterised query entry point.
+    if schema.is_empty() || schema.contains(['\'', '\\']) {
+        return None;
+    }
+    match dialect {
+        // A partitioned parent stores nothing itself, so sum its partitions.
+        SqlDialect::Postgres => Some(format!(
+            "SELECT c.relname::text, (CASE WHEN c.relkind = 'p' \
+             THEN (SELECT COALESCE(SUM(pg_total_relation_size(p.relid)), 0) FROM pg_partition_tree(c.oid) p) \
+             ELSE pg_total_relation_size(c.oid) END)::bigint \
+             FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace \
+             WHERE n.nspname = '{schema}' AND c.relkind IN ('r', 'p')"
+        )),
+        SqlDialect::Mysql => Some(format!(
+            "SELECT table_name, CAST(data_length + index_length AS SIGNED) \
+             FROM information_schema.tables WHERE table_schema = '{schema}'"
+        )),
+        _ => None,
+    }
+}
+
+fn parse_table_sizes(rows: &[Vec<Value>]) -> HashMap<String, i64> {
+    rows.iter()
+        .filter_map(|row| {
+            let name = row.first()?.as_str()?;
+            let size = row.get(1)?;
+            // Some drivers serialise 64-bit integers as strings.
+            let size = size.as_i64().or_else(|| size.as_str()?.parse().ok())?;
+            Some((name.to_string(), size))
+        })
+        .collect()
+}
+
+/// Table sizes for the explorer. Best effort: any failure yields no sizes.
+async fn table_sizes(
+    driver: &dyn DatabaseDriver,
+    params: &ConnectionParams,
+    schema: Option<&str>,
+) -> HashMap<String, i64> {
+    let Some(dialect) = driver.manifest().capabilities.sql_dialect else {
+        return HashMap::new();
+    };
+    let schema = schema.unwrap_or(match dialect {
+        SqlDialect::Postgres => "public",
+        _ => params.database.primary(),
+    });
+    let Some(sql) = table_sizes_sql(dialect, schema) else {
+        return HashMap::new();
+    };
+    // pg_total_relation_size waits on table locks; the table list must not.
+    let lookup = driver.execute_query(params, &sql, None, 1, None);
+    match tokio::time::timeout(Duration::from_secs(3), lookup).await {
+        Ok(Ok(result)) => parse_table_sizes(&result.rows),
+        Ok(Err(error)) => {
+            log::debug!("Table size lookup failed: {error}");
+            HashMap::new()
+        }
+        Err(_) => {
+            log::debug!("Table size lookup timed out");
+            HashMap::new()
+        }
+    }
 }
 
 pub async fn get_columns(

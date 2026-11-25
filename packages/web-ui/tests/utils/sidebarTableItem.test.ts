@@ -42,6 +42,12 @@ describe('areTableItemPropsEqual', () => {
         expect(areTableItemPropsEqual(prev, next)).toBe(false);
     });
 
+    it('re-renders when the table size arrives or changes', () => {
+        const sized = {...base, table: {name: 'users', size_bytes: 8192}};
+        expect(areTableItemPropsEqual(base, sized)).toBe(false);
+        expect(areTableItemPropsEqual(sized, {...sized, table: {...sized.table}})).toBe(true);
+    });
+
     it('re-renders when the table name changes', () => {
         expect(areTableItemPropsEqual(base, {...base, table: {name: 'accounts'}})).toBe(false);
     });

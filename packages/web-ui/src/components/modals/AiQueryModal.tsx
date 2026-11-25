@@ -4,6 +4,7 @@ import {useTabularisClient} from '@/hooks/useTabularisClient';
 import {useDatabase} from '@/hooks/useDatabase';
 import {useSettings} from '@/hooks/useSettings';
 import {Modal} from '@/components/ui/Modal';
+import {CellDiffEditor} from '@/components/ui/CellDiffEditor';
 
 interface AiQueryModalProps {
     isOpen: boolean;
@@ -13,6 +14,8 @@ interface AiQueryModalProps {
     schema?: string;
     database?: string;
     initialPrompt?: string;
+    /** The query being fixed. When set, the result is shown as a diff to accept or cancel. */
+    originalSql?: string;
 }
 
 interface SchemaLoadState {
@@ -29,6 +32,7 @@ export const AiQueryModal = ({
     schema,
     database,
     initialPrompt,
+    originalSql,
 }: AiQueryModalProps) => {
     const {activeConnectionId, activeSchema, activeDatabaseName} = useDatabase();
     const {settings} = useSettings();
@@ -49,8 +53,10 @@ export const AiQueryModal = ({
     const [prompt, setPrompt] = useState(initialPrompt ?? '');
     const [wasOpen, setWasOpen] = useState(isOpen);
     const [promptIsFixDraft, setPromptIsFixDraft] = useState(initialPrompt !== undefined);
+    const [proposal, setProposal] = useState<string | null>(null);
     if (isOpen !== wasOpen) {
         setWasOpen(isOpen);
+        setProposal(null);
         if (isOpen && initialPrompt !== undefined) {
             setPrompt(initialPrompt);
             setPromptIsFixDraft(true);
@@ -126,6 +132,15 @@ export const AiQueryModal = ({
         };
     }, [isOpen, resolvedConnectionId, schemaKey, loadSchema]);
 
+    const accept = (sql: string) => {
+        onInsert(sql);
+        if (initialPrompt !== undefined) {
+            setPrompt('');
+            setPromptIsFixDraft(false);
+        }
+        onClose();
+    };
+
     const handleGenerate = async () => {
         if (!prompt.trim() || !settings.aiProvider) {
             setError('Please configure AI provider in Settings and enter a prompt.');
@@ -148,12 +163,11 @@ export const AiQueryModal = ({
                     schema: schemaContext,
                 },
             });
-            onInsert(sql);
-            if (initialPrompt !== undefined) {
-                setPrompt('');
-                setPromptIsFixDraft(false);
+            if (originalSql !== undefined) {
+                setProposal(sql);
+                return;
             }
-            onClose();
+            accept(sql);
         } catch (err) {
             setError(String(err));
         } finally {
@@ -167,7 +181,9 @@ export const AiQueryModal = ({
             onClose={onClose}
             overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
         >
-            <div className="bg-elevated border border-strong rounded-xl w-[600px] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+            <div
+                className={`bg-elevated border border-strong rounded-xl ${proposal !== null ? 'w-[900px]' : 'w-[600px]'} max-w-[95vw] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden`}
+            >
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-default">
                     <div className="flex items-center gap-2 text-primary font-medium">
@@ -190,7 +206,19 @@ export const AiQueryModal = ({
                         </div>
                     )}
 
-                    <div>
+                    {proposal !== null && (
+                        <div className="h-[360px] border border-default rounded-lg overflow-hidden">
+                            <CellDiffEditor
+                                original={originalSql ?? ''}
+                                modified={proposal}
+                                readOnly
+                                renderSideBySide
+                                language="sql"
+                            />
+                        </div>
+                    )}
+
+                    <div className={proposal !== null ? 'hidden' : undefined}>
                         <label
                             htmlFor={promptId}
                             className="block text-sm font-medium text-secondary mb-2"
@@ -237,8 +265,17 @@ export const AiQueryModal = ({
                     >
                         Cancel
                     </button>
+                    {proposal !== null && (
+                        <button
+                            onClick={() => accept(proposal)}
+                            className="px-4 py-2 bg-accent-primary hover:bg-accent-primary/90 text-inverse rounded-lg text-sm font-medium transition-colors"
+                        >
+                            Accept
+                        </button>
+                    )}
                     <button
                         onClick={handleGenerate}
+                        hidden={proposal !== null}
                         disabled={isLoading || !prompt.trim() || !settings.aiProvider}
                         className="flex items-center gap-2 px-4 py-2 bg-accent-primary hover:bg-accent-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-inverse rounded-lg text-sm font-medium transition-colors"
                     >

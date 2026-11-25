@@ -15,6 +15,7 @@ import {SidebarIndexList} from './SidebarIndexList';
 import {dragState} from '@/utils/dragState';
 import {areTableItemPropsEqual} from '@/utils/sidebarTableItem';
 import {groupIndexes} from '@/utils/indexes';
+import {formatBytes} from '@/utils/taskManager';
 import type {TableColumn, ForeignKey, Index} from '@/types/schema';
 import type {ContextMenuData} from '@/types/sidebar';
 import type {DriverCapabilities} from '@/types/plugins';
@@ -24,7 +25,7 @@ import {useExplorerExpanded} from '@/hooks/useExplorerExpanded';
 import {expansionKey} from '@/utils/explorerExpansion';
 
 interface SidebarTableItemProps {
-    table: {name: string; comment?: string | null};
+    table: {name: string; comment?: string | null; size_bytes?: number | null};
     activeTable: string | null;
     onTableClick: (name: string) => void;
     onTableDoubleClick: (name: string) => void;
@@ -237,6 +238,11 @@ const SidebarTableItemImpl = ({
                 <span className="truncate flex-1" title={table.comment || undefined}>
                     {table.name}
                 </span>
+                {table.size_bytes != null && (
+                    <span className="shrink-0 text-[10px] tabular-nums opacity-50">
+                        {formatBytes(table.size_bytes)}
+                    </span>
+                )}
             </div>
             {isExpanded && (
                 <div className="ml-[22px] border-l border-default">

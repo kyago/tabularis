@@ -136,3 +136,32 @@ fn schema_selection_and_preferences_are_scoped_to_database() {
         vec!["reporting"]
     );
 }
+
+#[test]
+fn table_sizes_sql_is_dialect_aware_and_never_inlines_unsafe_schemas() {
+    let postgres = table_sizes_sql(SqlDialect::Postgres, "public").expect("postgres sql");
+    assert!(postgres.contains("pg_total_relation_size"));
+    assert!(postgres.contains("n.nspname = 'public'"));
+    let mysql = table_sizes_sql(SqlDialect::Mysql, "shop").expect("mysql sql");
+    assert!(mysql.contains("table_schema = 'shop'"));
+
+    assert!(table_sizes_sql(SqlDialect::Sqlite, "main").is_none());
+    assert!(table_sizes_sql(SqlDialect::Generic, "main").is_none());
+    assert!(table_sizes_sql(SqlDialect::Postgres, "").is_none());
+    assert!(table_sizes_sql(SqlDialect::Postgres, "a'; DROP TABLE x; --").is_none());
+    assert!(table_sizes_sql(SqlDialect::Mysql, "a\\").is_none());
+}
+
+#[test]
+fn parse_table_sizes_accepts_numbers_and_numeric_strings() {
+    let rows = vec![
+        vec![serde_json::json!("users"), serde_json::json!(8192)],
+        vec![serde_json::json!("orders"), serde_json::json!("16384")],
+        vec![serde_json::json!("no_stats"), Value::Null],
+        vec![serde_json::json!("short_row")],
+    ];
+    let sizes = parse_table_sizes(&rows);
+    assert_eq!(sizes.len(), 2);
+    assert_eq!(sizes["users"], 8192);
+    assert_eq!(sizes["orders"], 16384);
+}

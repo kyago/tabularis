@@ -6,6 +6,7 @@ export interface TableInfo {
     name: string;
     schema?: string; // database/schema the table belongs to (populated in multiDb mode)
     comment?: string | null;
+    size_bytes?: number | null; // total on-disk bytes (data + indexes), when the engine reports it
 }
 
 export interface ViewInfo {

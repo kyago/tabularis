@@ -7201,6 +7201,7 @@ export const Editor = ({commandScopeId}: EditorProps) => {
                 schema={activeTab?.schema ?? activeSchema ?? undefined}
                 database={activeTab?.database}
                 initialPrompt={aiFixPrompt ?? undefined}
+                originalSql={aiFixPrompt !== null ? activeTab?.query : undefined}
                 onInsert={(q) => {
                     updateActiveTab({query: q});
                     // A fix is only inserted so the user can review it before running.

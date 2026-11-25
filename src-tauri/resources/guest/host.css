@@ -962,6 +962,9 @@
   .h-\[320px\] {
     height: 320px;
   }
+  .h-\[360px\] {
+    height: 360px;
+  }
   .h-\[min\(760px\,90vh\)\] {
     height: min(760px, 90vh);
   }

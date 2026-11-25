@@ -310,6 +310,7 @@ pub async fn get_tables(
         .map(|r| TableInfo {
             name: mysql_row_str(r, 0),
             comment: mysql_row_str_opt(r, 1),
+            size_bytes: None,
         })
         .collect();
     log::debug!("MySQL: Found {} tables in {}", tables.len(), db_name);

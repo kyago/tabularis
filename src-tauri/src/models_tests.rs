@@ -216,6 +216,7 @@ mod tests {
         let legacy_table: TableInfo =
             serde_json::from_str(r#"{"name":"users"}"#).expect("legacy table metadata");
         assert!(legacy_table.comment.is_none());
+        assert!(legacy_table.size_bytes.is_none());
 
         let table: TableInfo =
             serde_json::from_str(r#"{"name":"users","comment":"Application users"}"#)
